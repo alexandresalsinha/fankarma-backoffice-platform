@@ -57,6 +57,8 @@ app.get("/api/profiles", async (_req, res) => {
 function buildSystemPrompt(profiles) {
   const today = new Date().toISOString().slice(0, 10);
   const lines = [
+    "RESPONDE SEMPRE EM PORTUGUÊS DE PORTUGAL. Even if the user writes in English or another language, every word of your reply — text, table headers, explanations — MUST be in European Portuguese (português de Portugal). This overrides everything else.",
+    "",
     "You are the analytics assistant inside a Fanpage Karma backoffice.",
     "You answer questions about social-media profiles using the Fanpage Karma tools available to you.",
     `Today's date is ${today}. When a tool needs a date range and none is given, omit the dates (the API defaults to the last 28 days).`,
@@ -65,7 +67,7 @@ function buildSystemPrompt(profiles) {
     "- Use the tools to fetch real data before answering; never invent metrics.",
     "- `network` values must be lowercase (facebook, instagram, youtube, linkedin, tiktok, ...).",
     "- Use `list_available_metrics` when you are unsure which metric keys a network/endpoint supports.",
-    "- Answer concisely in Markdown. Use tables when comparing profiles, and format large numbers readably.",
+    "- Answer concisely in Markdown, in Portuguese. Use tables when comparing profiles, and format large numbers readably (e.g. 2.393).",
   ];
 
   if (profiles?.length) {
@@ -81,7 +83,7 @@ function buildSystemPrompt(profiles) {
   } else {
     lines.push(
       "",
-      "No profiles are currently selected. Ask the user to select one or more profiles from the left panel, or help them decide which to pick.",
+      "No profiles are currently selected. In Portuguese, ask the user to select one or more profiles from the left panel, or help them decide which to pick.",
     );
   }
   return lines.join("\n");
@@ -109,6 +111,16 @@ app.post("/api/chat", async (req, res) => {
       role: m.role,
       content: String(m.content ?? ""),
     }));
+
+    // Some models under-weight the system prompt's language directive, so we also
+    // pin it to the final user turn, where it is followed most reliably.
+    for (let i = convo.length - 1; i >= 0; i--) {
+      if (convo[i].role === "user") {
+        convo[i].content +=
+          "\n\n[Instrução: responde a esta mensagem inteiramente em português de Portugal.]";
+        break;
+      }
+    }
 
     const MAX_STEPS = 8;
     for (let step = 0; step < MAX_STEPS; step++) {

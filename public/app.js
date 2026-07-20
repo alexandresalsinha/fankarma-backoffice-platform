@@ -30,7 +30,7 @@ async function loadProfiles() {
     renderNetworkFilters();
     renderProfiles();
   } catch (e) {
-    $("#profile-list").innerHTML = `<div class="loading">⚠ ${esc(e.message)}</div>`;
+    $("#profile-list").innerHTML = `<div class="loading">⚠ Erro ao carregar perfis: ${esc(e.message)}</div>`;
   }
 }
 
@@ -63,7 +63,7 @@ function renderProfiles() {
   });
 
   if (!filtered.length) {
-    list.innerHTML = `<div class="loading">No profiles match.</div>`;
+    list.innerHTML = `<div class="loading">Nenhum perfil corresponde.</div>`;
     return;
   }
 
@@ -105,13 +105,13 @@ function profileRow(p) {
 
 function updateSelection() {
   const n = state.selected.size;
-  $("#selection-count").textContent = `${n} selected`;
+  $("#selection-count").textContent = `${n} selecionado${n === 1 ? "" : "s"}`;
   const ctx = $("#context-line");
-  if (n === 0) ctx.textContent = "Select profiles on the left to scope your questions.";
+  if (n === 0) ctx.textContent = "Selecione perfis à esquerda para definir o âmbito das suas perguntas.";
   else {
     const names = [...state.selected.values()].map((p) => p.profile_name);
     ctx.textContent =
-      "In context: " + names.slice(0, 3).join(", ") + (n > 3 ? ` +${n - 3} more` : "");
+      "Em contexto: " + names.slice(0, 3).join(", ") + (n > 3 ? ` +${n - 3}` : "");
   }
 }
 
@@ -124,7 +124,7 @@ function addMessage(role) {
     el("div", "avatar", role === "user" ? "🧑" : "📊"),
     (() => {
       const body = el("div", "body");
-      body.append(el("div", "role", role === "user" ? "You" : "Assistant"));
+      body.append(el("div", "role", role === "user" ? "Você" : "Assistente"));
       body.append(el("div", "bubble"));
       return body;
     })(),
@@ -193,13 +193,13 @@ function renderTool(bubble, data) {
   }
   if (data.status === "running") {
     node.className = "tool-call";
-    node.innerHTML = `<span class="spinner"></span> Querying <code>${esc(data.name)}</code>…`;
+    node.innerHTML = `<span class="spinner"></span> A consultar <code>${esc(data.name)}</code>…`;
   } else if (data.status === "done") {
     node.className = "tool-call done";
-    node.innerHTML = `<span class="dot">●</span> <code>${esc(data.name)}</code> returned data`;
+    node.innerHTML = `<span class="dot">●</span> <code>${esc(data.name)}</code> devolveu dados`;
   } else if (data.status === "error") {
     node.className = "tool-call error";
-    node.innerHTML = `⚠ <code>${esc(data.name)}</code> failed: ${esc(data.error || "")}`;
+    node.innerHTML = `⚠ <code>${esc(data.name)}</code> falhou: ${esc(data.error || "")}`;
   }
 }
 
@@ -290,7 +290,7 @@ async function openSchema() {
   const modal = $("#schema-modal");
   const body = $("#schema-body");
   modal.classList.remove("hidden");
-  body.innerHTML = `<div class="loading">Loading schema…</div>`;
+  body.innerHTML = `<div class="loading">A carregar esquema…</div>`;
   try {
     const res = await fetch("/api/schema");
     const data = await res.json();
@@ -314,10 +314,10 @@ async function openSchema() {
 
 // ── Wiring ───────────────────────────────────────────────────────────────
 const SUGGESTIONS = [
-  "How many followers does each selected profile have?",
-  "Compare engagement rate across the selected profiles.",
-  "What were the top posts in the last 28 days?",
-  "Which network performs best for this brand?",
+  "Quantos seguidores tem cada perfil selecionado?",
+  "Compara a taxa de interação entre os perfis selecionados.",
+  "Quais foram as melhores publicações dos últimos 28 dias?",
+  "Que rede tem melhor desempenho para esta marca?",
 ];
 
 function renderSuggestions() {
@@ -340,8 +340,8 @@ function resetChat() {
   state.history = [];
   $("#messages").innerHTML =
     `<div class="empty-chat"><div class="empty-emoji">💬</div>
-     <h3>Ask about your connected profiles</h3>
-     <p>Select one or more profiles, then ask questions — the assistant queries the Fanpage Karma API live.</p>
+     <h3>Faça perguntas sobre os seus perfis ligados</h3>
+     <p>Selecione um ou mais perfis e faça perguntas — o assistente consulta a API da Fanpage Karma em tempo real.</p>
      <div class="suggestions" id="suggestions"></div></div>`;
   renderSuggestions();
 }

@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fanpage Karma · Backoffice</title>
+    <meta name="lang" content="pt" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
@@ -15,55 +16,55 @@
           <span class="brand-dot"></span>
           <div>
             <h1>Fanpage Karma</h1>
-            <p>Connected profiles</p>
+            <p>Perfis ligados</p>
           </div>
         </div>
         <div class="side-tools">
-          <input id="search" type="search" placeholder="Search profiles…" autocomplete="off" />
+          <input id="search" type="search" placeholder="Procurar perfis…" autocomplete="off" />
           <div id="network-filters" class="chips"></div>
         </div>
         <div class="selection-bar">
-          <span id="selection-count">0 selected</span>
-          <button id="clear-selection" class="link-btn" type="button">Clear</button>
+          <span id="selection-count">0 selecionados</span>
+          <button id="clear-selection" class="link-btn" type="button">Limpar</button>
         </div>
       </header>
       <div id="profile-list" class="profile-list">
-        <div class="loading">Loading profiles…</div>
+        <div class="loading">A carregar perfis…</div>
       </div>
       <footer class="side-foot">
-        <button id="schema-btn" class="ghost-btn" type="button">⌗ View data schema</button>
+        <button id="schema-btn" class="ghost-btn" type="button">⌗ Ver esquema de dados</button>
       </footer>
     </aside>
 
     <main id="chat">
       <header class="chat-head">
         <div>
-          <h2>Analytics chat</h2>
-          <p id="context-line">Select profiles on the left to scope your questions.</p>
+          <h2>Chat de análise</h2>
+          <p id="context-line">Selecione perfis à esquerda para definir o âmbito das suas perguntas.</p>
         </div>
-        <button id="reset-chat" class="ghost-btn" type="button">New chat</button>
+        <button id="reset-chat" class="ghost-btn" type="button">Nova conversa</button>
       </header>
 
       <div id="messages" class="messages">
         <div class="empty-chat">
           <div class="empty-emoji">💬</div>
-          <h3>Ask about your connected profiles</h3>
-          <p>Select one or more profiles, then ask questions — the assistant queries the Fanpage Karma API live.</p>
+          <h3>Faça perguntas sobre os seus perfis ligados</h3>
+          <p>Selecione um ou mais perfis e faça perguntas — o assistente consulta a API da Fanpage Karma em tempo real.</p>
           <div class="suggestions" id="suggestions"></div>
         </div>
       </div>
 
       <form id="composer" class="composer">
-        <textarea id="input" rows="1" placeholder="Ask about the selected profiles…" autocomplete="off"></textarea>
-        <button id="send" type="submit" title="Send">➤</button>
+        <textarea id="input" rows="1" placeholder="Pergunte sobre os perfis selecionados…" autocomplete="off"></textarea>
+        <button id="send" type="submit" title="Enviar">➤</button>
       </form>
     </main>
 
     <div id="schema-modal" class="modal hidden">
       <div class="modal-card">
         <header>
-          <h3>Fanpage Karma MCP · Tool schema</h3>
-          <button id="schema-close" class="link-btn" type="button">Close</button>
+          <h3>Fanpage Karma MCP · Esquema de ferramentas</h3>
+          <button id="schema-close" class="link-btn" type="button">Fechar</button>
         </header>
         <div id="schema-body" class="schema-body"></div>
       </div>
