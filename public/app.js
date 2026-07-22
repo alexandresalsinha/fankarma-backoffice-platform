@@ -11,6 +11,47 @@ const state = {
 const NETWORK_ORDER = ["instagram", "facebook", "tiktok", "youtube", "linkedin", "x", "threads", "bluesky", "pinterest"];
 const keyOf = (p) => `${p.network}:${p.profile_id}`;
 
+// The Fanpage Karma API exposes no company/group field on profiles — the brand
+// is only present inside the profile name (repeated across networks/regions).
+// We derive a "company" by stripping country/region qualifiers and normalising
+// separators, then group networks/regions of the same brand together.
+const REGION_WORDS = new Set([
+  "portugal", "pt", "espana", "spain", "france", "angola", "luxembourg",
+  "suisse", "switzerland", "usa", "uk", "brasil", "brazil", "restelo", "lisboa",
+]);
+const deaccent = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+// A display-friendly brand name: keep original casing, drop descriptor suffixes
+// (after " - "), normalise separators, and remove region words.
+function cleanBrandName(name) {
+  const s = String(name).split(/\s+[-–]\s+/)[0].replace(/[.|&/(),]/g, " ");
+  const tokens = s.split(/\s+/).filter(Boolean).filter((t) => {
+    if (t.toLowerCase() === "l") return false;          // "Omoda l Jaecoo" separator
+    return !REGION_WORDS.has(deaccent(t).toLowerCase());
+  });
+  return tokens.join(" ").trim();
+}
+
+// Stable grouping key (case/accent-insensitive) for a profile's company.
+const companyKeyOf = (name) => deaccent(cleanBrandName(name)).toLowerCase() || deaccent(name).toLowerCase();
+
+// Pick the nicest label among the brand names seen for one company:
+// most frequent, then avoid ALL-CAPS, prefer a leading capital, then shortest.
+function pickCompanyLabel(names) {
+  const freq = {};
+  names.forEach((n) => (freq[n] = (freq[n] || 0) + 1));
+  return [...new Set(names)].sort((a, b) => {
+    if (freq[b] !== freq[a]) return freq[b] - freq[a];
+    const capA = a === a.toUpperCase() && /[A-Z]/.test(a);
+    const capB = b === b.toUpperCase() && /[A-Z]/.test(b);
+    if (capA !== capB) return capA ? 1 : -1;
+    const luA = /^[A-ZÀ-Ý]/.test(a), luB = /^[A-ZÀ-Ý]/.test(b);
+    if (luA !== luB) return luA ? -1 : 1;
+    if (a.length !== b.length) return a.length - b.length;
+    return a.localeCompare(b);
+  })[0];
+}
+
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, html) => {
   const n = document.createElement(tag);
@@ -59,7 +100,7 @@ function renderProfiles() {
   const filtered = state.profiles.filter((p) => {
     if (state.networkFilter && p.network !== state.networkFilter) return false;
     if (!q) return true;
-    return (p.profile_name + " " + p.username + " " + p.network).toLowerCase().includes(q);
+    return (p.profile_name + " " + p.username + " " + p.network + " " + cleanBrandName(p.profile_name)).toLowerCase().includes(q);
   });
 
   if (!filtered.length) {
@@ -67,15 +108,32 @@ function renderProfiles() {
     return;
   }
 
-  const groups = {};
-  filtered.forEach((p) => (groups[p.network] ??= []).push(p));
-  const nets = Object.keys(groups).sort((a, b) => NETWORK_ORDER.indexOf(a) - NETWORK_ORDER.indexOf(b));
+  // Group by company (derived from the profile name) first, then by network.
+  const companies = {};
+  filtered.forEach((p) => {
+    const key = companyKeyOf(p.profile_name);
+    (companies[key] ??= { labels: [], items: [] });
+    companies[key].labels.push(cleanBrandName(p.profile_name) || p.profile_name);
+    companies[key].items.push(p);
+  });
 
-  nets.forEach((net) => {
-    list.appendChild(el("div", "net-group-label", `${net} · ${groups[net].length}`));
-    groups[net]
-      .sort((a, b) => a.profile_name.localeCompare(b.profile_name))
-      .forEach((p) => list.appendChild(profileRow(p)));
+  const ordered = Object.values(companies)
+    .map((g) => ({ label: pickCompanyLabel(g.labels), items: g.items }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  ordered.forEach(({ label, items }) => {
+    list.appendChild(el("div", "company-group-label", `${esc(label)} · ${items.length}`));
+
+    const byNetwork = {};
+    items.forEach((p) => (byNetwork[p.network] ??= []).push(p));
+    const nets = Object.keys(byNetwork).sort((a, b) => NETWORK_ORDER.indexOf(a) - NETWORK_ORDER.indexOf(b));
+
+    nets.forEach((net) => {
+      list.appendChild(el("div", "net-group-label", `${net} · ${byNetwork[net].length}`));
+      byNetwork[net]
+        .sort((a, b) => a.profile_name.localeCompare(b.profile_name))
+        .forEach((p) => list.appendChild(profileRow(p)));
+    });
   });
 }
 
