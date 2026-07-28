@@ -36,6 +36,51 @@
       </footer>
     </aside>
 
+    <div class="resizer" id="resizer-1" data-target="left"></div>
+
+    <section id="dashboard">
+      <header class="dash-head">
+        <div>
+          <h2>Dashboard</h2>
+          <p id="dash-context">Selecione redes de perfis à esquerda para ver os totais.</p>
+        </div>
+        <span id="dash-status" class="dash-status"></span>
+      </header>
+
+      <div id="dash-body" class="dash-body">
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: var(--accent);">👥</div>
+            <div class="kpi-meta">
+              <div class="kpi-label">Total de seguidores</div>
+              <div class="kpi-value" id="kpi-followers">0</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: var(--like);">❤</div>
+            <div class="kpi-meta">
+              <div class="kpi-label">Total de likes</div>
+              <div class="kpi-value" id="kpi-likes">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-section">
+          <h3>Por rede</h3>
+          <div id="network-breakdown" class="network-breakdown">
+            <div class="dash-empty">Nenhuma rede selecionada.</div>
+          </div>
+        </div>
+
+        <div class="dash-section">
+          <h3 id="selected-nets-title">Redes selecionadas</h3>
+          <div id="selected-nets" class="selected-nets"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="resizer" id="resizer-2" data-target="mid"></div>
+
     <main id="chat">
       <header class="chat-head">
         <div>
