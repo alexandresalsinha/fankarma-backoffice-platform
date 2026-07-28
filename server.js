@@ -40,10 +40,19 @@ app.get("/api/schema", async (_req, res) => {
 });
 
 // ── REST: connected profiles (the "data" for the left panel) ───────────
+// Fetched straight from the Fanpage Karma v2 REST API — no MCP session/handshake.
+// Base is derived from FPK_MCP_URL (…/api/v2/mcp → …/api/v2).
+const REST_BASE =
+  (process.env.FPK_MCP_URL || "").replace(/\/mcp\/?$/, "") ||
+  "https://app.fanpagekarma.com/api/v2";
+
 app.get("/api/profiles", async (_req, res) => {
   try {
-    const result = await callTool("list_connected_profiles", {});
-    const parsed = JSON.parse(contentToText(result));
+    const r = await fetch(`${REST_BASE}/profiles/connected`, {
+      headers: { Authorization: process.env.FPK_AUTH, Accept: "application/json" },
+    });
+    const parsed = await r.json();
+    if (!r.ok) throw new Error(parsed?.error?.message || `Fanpage Karma API returned ${r.status}`);
     res.json({
       profiles: parsed?.data?.profiles || [],
       total: parsed?.metadata?.total_profiles ?? (parsed?.data?.profiles?.length || 0),
