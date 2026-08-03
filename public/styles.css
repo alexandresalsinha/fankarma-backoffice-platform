@@ -193,6 +193,25 @@ body.resizing { cursor: col-resize; user-select: none; }
 .sel-net .spinner { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex: none; }
 .sel-net.error .nums { color: var(--bad); }
 
+.dash-section h3 { display: flex; align-items: center; gap: 8px; }
+.insight-status { font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.insight-status .spinner { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.insight-body {
+  font-size: 13px; line-height: 1.55; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.insight-body:empty { display: none; }
+.insight-body p { margin: 0 0 8px; }
+.insight-body p:last-child { margin-bottom: 0; }
+.insight-body table { border-collapse: collapse; margin: 6px 0; font-size: 12px; width: 100%; }
+.insight-body th, .insight-body td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.insight-body th { background: var(--panel); }
+.insight-body ul, .insight-body ol { margin: 0 0 8px; padding-left: 18px; }
+.insight-body code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.insight-body strong { color: var(--text); }
+.insight-error { color: var(--bad); font-size: 12.5px; }
+
 /* ── Chat ────────────────────────────────────────────────── */
 #chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .chat-head {

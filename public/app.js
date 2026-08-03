@@ -191,7 +191,77 @@ async function syncDashboard() {
     pending.push(fetchMetrics(k, p));
   }
   renderDashboard();
+  scheduleInsight();
   if (pending.length) await Promise.all(pending);
+}
+
+// ── LLM insight: "Que rede tem melhor desempenho para esta marca?" ───────
+// Re-asked whenever the selection changes, scoped to the selected profiles,
+// and streamed into the bottom of the dashboard. Debounced so a burst of
+// toggles collapses into one request; the previous request is aborted.
+const INSIGHT_QUESTION = "Que rede tem melhor desempenho para esta marca?";
+let insightTimer = null;
+let insightController = null;
+let insightSeq = 0;
+
+function scheduleInsight() {
+  clearTimeout(insightTimer);
+  const section = $("#insight-section");
+
+  if (state.selected.size === 0) {
+    if (insightController) insightController.abort();
+    insightSeq++;                       // invalidate any in-flight stream
+    section.hidden = true;
+    $("#insight-body").innerHTML = "";
+    $("#insight-status").innerHTML = "";
+    return;
+  }
+  section.hidden = false;
+  $("#insight-status").innerHTML = `<span class="spinner"></span> a aguardar…`;
+  insightTimer = setTimeout(runInsight, 900);
+}
+
+async function runInsight() {
+  const body = $("#insight-body");
+  const status = $("#insight-status");
+  if (insightController) insightController.abort();
+  const controller = new AbortController();
+  insightController = controller;
+  const seq = ++insightSeq;
+
+  const profiles = [...state.selected.values()].map((p) => ({
+    network: p.network, profile_id: p.profile_id,
+    profile_name: p.profile_name, username: p.username,
+  }));
+
+  status.innerHTML = `<span class="spinner"></span> a analisar…`;
+  body.innerHTML = "";
+  let answer = "";
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: INSIGHT_QUESTION }], profiles }),
+      signal: controller.signal,
+    });
+    await readSSE(res, (event, data) => {
+      if (seq !== insightSeq) return;   // a newer request superseded this one
+      if (event === "text") {
+        answer += (answer ? "\n\n" : "") + data.text;
+        body.innerHTML = renderMarkdown(answer);
+      } else if (event === "tool" && data.status === "running") {
+        status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
+      } else if (event === "error") {
+        body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
+      }
+    });
+    if (seq === insightSeq) status.innerHTML = "";
+  } catch (e) {
+    if (e.name === "AbortError" || seq !== insightSeq) return;
+    status.innerHTML = "";
+    body.innerHTML = `<div class="insight-error">⚠ ${esc(e.message)}</div>`;
+  }
 }
 
 async function fetchMetrics(k, p) {
@@ -572,7 +642,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initResizers();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
-  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); };
+  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsight(); };
   $("#reset-chat").onclick = resetChat;
   $("#schema-btn").onclick = openSchema;
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
