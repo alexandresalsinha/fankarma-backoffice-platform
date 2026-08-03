@@ -191,43 +191,72 @@ async function syncDashboard() {
     pending.push(fetchMetrics(k, p));
   }
   renderDashboard();
-  scheduleInsight();
+  scheduleInsights();
   if (pending.length) await Promise.all(pending);
 }
 
-// ── LLM insight: "Que rede tem melhor desempenho para esta marca?" ───────
-// Re-asked whenever the selection changes, scoped to the selected profiles,
-// and streamed into the bottom of the dashboard. Debounced so a burst of
-// toggles collapses into one request; the previous request is aborted.
-const INSIGHT_QUESTION = "Que rede tem melhor desempenho para esta marca?";
-let insightTimer = null;
-let insightController = null;
-let insightSeq = 0;
+// ── LLM insights ─────────────────────────────────────────────────────────
+// A fixed set of questions re-asked whenever the selection changes, scoped to
+// the selected profiles and streamed into the bottom of the dashboard. Each
+// question is debounced (a burst of toggles collapses into one request) and
+// abortable (a new selection cancels the in-flight stream).
+const INSIGHTS = [
+  {
+    id: "best-network",
+    title: "Melhor desempenho",
+    question: "Que rede tem melhor desempenho para esta marca?",
+  },
+  {
+    id: "growth-content",
+    title: "Conteúdos que atraíram seguidores",
+    question:
+      "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento.",
+  },
+];
 
-function scheduleInsight() {
-  clearTimeout(insightTimer);
-  const section = $("#insight-section");
-
-  if (state.selected.size === 0) {
-    if (insightController) insightController.abort();
-    insightSeq++;                       // invalidate any in-flight stream
+function buildInsightSections() {
+  const host = $("#insights");
+  host.innerHTML = "";
+  INSIGHTS.forEach((ins) => {
+    const section = el("div", "dash-section");
+    section.id = `insight-${ins.id}`;
     section.hidden = true;
-    $("#insight-body").innerHTML = "";
-    $("#insight-status").innerHTML = "";
-    return;
-  }
-  section.hidden = false;
-  $("#insight-status").innerHTML = `<span class="spinner"></span> a aguardar…`;
-  insightTimer = setTimeout(runInsight, 900);
+    section.innerHTML =
+      `<h3>${esc(ins.title)} <span class="insight-status" data-status="${ins.id}"></span></h3>
+       <div class="insight-body" data-body="${ins.id}"></div>`;
+    host.appendChild(section);
+    ins._timer = null;
+    ins._controller = null;
+    ins._seq = 0;
+  });
 }
 
-async function runInsight() {
-  const body = $("#insight-body");
-  const status = $("#insight-status");
-  if (insightController) insightController.abort();
+function scheduleInsights() {
+  const empty = state.selected.size === 0;
+  INSIGHTS.forEach((ins) => {
+    clearTimeout(ins._timer);
+    const section = $(`#insight-${ins.id}`);
+    if (empty) {
+      if (ins._controller) ins._controller.abort();
+      ins._seq++;                       // invalidate any in-flight stream
+      section.hidden = true;
+      $(`[data-body="${ins.id}"]`).innerHTML = "";
+      $(`[data-status="${ins.id}"]`).innerHTML = "";
+      return;
+    }
+    section.hidden = false;
+    $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
+    ins._timer = setTimeout(() => runInsight(ins), 900);
+  });
+}
+
+async function runInsight(ins) {
+  const body = $(`[data-body="${ins.id}"]`);
+  const status = $(`[data-status="${ins.id}"]`);
+  if (ins._controller) ins._controller.abort();
   const controller = new AbortController();
-  insightController = controller;
-  const seq = ++insightSeq;
+  ins._controller = controller;
+  const seq = ++ins._seq;
 
   const profiles = [...state.selected.values()].map((p) => ({
     network: p.network, profile_id: p.profile_id,
@@ -242,11 +271,11 @@ async function runInsight() {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: INSIGHT_QUESTION }], profiles }),
+      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles }),
       signal: controller.signal,
     });
     await readSSE(res, (event, data) => {
-      if (seq !== insightSeq) return;   // a newer request superseded this one
+      if (seq !== ins._seq) return;     // a newer request superseded this one
       if (event === "text") {
         answer += (answer ? "\n\n" : "") + data.text;
         body.innerHTML = renderMarkdown(answer);
@@ -256,9 +285,9 @@ async function runInsight() {
         body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
       }
     });
-    if (seq === insightSeq) status.innerHTML = "";
+    if (seq === ins._seq) status.innerHTML = "";
   } catch (e) {
-    if (e.name === "AbortError" || seq !== insightSeq) return;
+    if (e.name === "AbortError" || seq !== ins._seq) return;
     status.innerHTML = "";
     body.innerHTML = `<div class="insight-error">⚠ ${esc(e.message)}</div>`;
   }
@@ -638,11 +667,12 @@ document.addEventListener("DOMContentLoaded", () => {
   loadProfiles();
   renderSuggestions();
   updateSelection();
+  buildInsightSections();
   renderDashboard();
   initResizers();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
-  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsight(); };
+  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };
   $("#reset-chat").onclick = resetChat;
   $("#schema-btn").onclick = openSchema;
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
