@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+deploy.zip
+pack.ps1
+.deploy-state.json
