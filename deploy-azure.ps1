@@ -4,11 +4,11 @@
 $ErrorActionPreference = "Stop"
 
 # ── Config ────────────────────────────────────────────────────────────
-$ResourceGroup = "rg-fankarma"
+$ResourceGroup = "F6-Development"
 $Location      = "westeurope"
-$PlanName      = "asp-fankarma"
-$Sku           = "F1"                      # Free tier. Change to B1 for always-on / better SSE.
-$BaseAppName   = "fankarma-platform"
+$PlanName      = "Linux-F6Development"
+$Sku           = "P1mv3"                      # Free tier. Change to B1 for always-on / better SSE.
+$BaseAppName   = "f6-development-fankarma-platform"
 $Runtime       = "NODE:24-lts"
 
 # Globally unique app name (base + 5 hex chars). Persisted so re-runs update
