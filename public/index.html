@@ -10,15 +10,34 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
   </head>
   <body class="chat-collapsed">
+    <header id="topbar">
+      <div class="topbar-brand">
+        <span class="topbar-logo"></span>
+        <span class="topbar-title">Karma Full6</span>
+        <span id="platform-version" class="topbar-version" title="Versão da plataforma">v—</span>
+      </div>
+      <div class="topbar-actions">
+        <label class="model-picker" title="Modelo de LLM usado nas análises">
+          <span class="model-picker-label">Modelo</span>
+          <select id="model-select" aria-label="Selecionar modelo de LLM">
+            <option value="" disabled selected>A carregar…</option>
+          </select>
+        </label>
+        <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações">⚙</button>
+        <button id="login-btn" class="login-btn" type="button">Iniciar sessão</button>
+      </div>
+    </header>
+
+    <div class="workspace">
     <aside id="sidebar">
       <header class="side-head">
-        <div class="brand">
+        <!-- <div class="brand">
           <span class="brand-dot"></span>
           <div>
             <h1>Karma Full6</h1>
             <p>Perfis ligados</p>
           </div>
-        </div>
+        </div> -->
         <div class="side-tools">
           <input id="search" type="search" placeholder="Procurar perfis…" autocomplete="off" />
           <div id="network-filters" class="chips"></div>
@@ -109,6 +128,7 @@
         <button id="send" type="submit" title="Enviar">➤</button>
       </form>
     </main>
+    </div>
 
     <button id="open-chat" class="open-chat-fab" type="button" title="Abrir chat" aria-label="Abrir chat de análise">💬</button>
 

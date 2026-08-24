@@ -7,6 +7,7 @@ const state = {
   search: "",
   history: [],           // [{role, content}]
   streaming: false,
+  model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
@@ -64,6 +65,34 @@ const el = (tag, cls, html) => {
   return n;
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ── Top bar: platform version + LLM model picker ─────────────────────────
+async function loadConfig() {
+  const select = $("#model-select");
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load config");
+
+    $("#platform-version").textContent = "v" + (data.version || "—");
+
+    const models = data.models?.length ? data.models : [data.defaultModel].filter(Boolean);
+    // Restore a previously-chosen model only if the server still offers it.
+    if (!models.includes(state.model)) state.model = data.defaultModel || models[0] || "";
+
+    select.innerHTML = "";
+    models.forEach((m) => {
+      const opt = el("option");
+      opt.value = m;
+      opt.textContent = m;
+      opt.selected = m === state.model;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    select.innerHTML = `<option value="" disabled selected>Indisponível</option>`;
+    console.error("Config load failed:", e.message);
+  }
+}
 
 // ── Profiles ───────────────────────────────────────────────────────────
 async function loadProfiles() {
@@ -271,7 +300,7 @@ async function runInsight(ins) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles }),
+      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles, model: state.model }),
       signal: controller.signal,
     });
     await readSSE(res, (event, data) => {
@@ -446,7 +475,7 @@ async function send(text) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: state.history, profiles }),
+      body: JSON.stringify({ messages: state.history, profiles, model: state.model }),
     });
 
     await readSSE(res, (event, data) => {
@@ -664,6 +693,7 @@ function initResizers() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadConfig();
   loadProfiles();
   renderSuggestions();
   updateSelection();
@@ -679,6 +709,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.remove("chat-collapsed");
     $("#input").focus();
   };
+  $("#model-select").addEventListener("change", (e) => {
+    state.model = e.target.value;
+    localStorage.setItem("llm-model", state.model);
+  });
+  $("#settings-btn").onclick = () => {
+    // Settings panel is not implemented yet — placeholder until it is built out.
+    alert("Configurações em breve.");
+  };
+  $("#login-btn").onclick = () => {
+    // Login flow is not implemented yet — placeholder until auth is wired up.
+    alert("Início de sessão em breve.");
+  };
+
   $("#schema-btn").onclick = openSchema;
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
   $("#schema-modal").onclick = (e) => { if (e.target.id === "schema-modal") $("#schema-modal").classList.add("hidden"); };

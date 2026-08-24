@@ -1,6 +1,6 @@
 {
   "name": "fankarma-backoffice-platform",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Web backoffice that fetches schema + data from the Fanpage Karma MCP, lists connected profiles, and offers an AI chat scoped to selected profiles.",
   "type": "module",
   "main": "server.js",
