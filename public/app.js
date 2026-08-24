@@ -2,11 +2,15 @@
 const state = {
   profiles: [],
   selected: new Map(),   // profile_id::network -> profile
+  metrics: new Map(),    // keyOf(profile) -> { status, followers, likes, error }
   networkFilter: null,
   search: "",
   history: [],           // [{role, content}]
   streaming: false,
 };
+
+const nf = new Intl.NumberFormat("pt-PT");
+const fmt = (n) => nf.format(Math.round(Number(n) || 0));
 
 const NETWORK_ORDER = ["instagram", "facebook", "tiktok", "youtube", "linkedin", "x", "threads", "bluesky", "pinterest"];
 const keyOf = (p) => `${p.network}:${p.profile_id}`;
@@ -157,6 +161,7 @@ function profileRow(p) {
     else state.selected.set(k, p);
     renderProfiles();
     updateSelection();
+    syncDashboard();
   };
   return row;
 }
@@ -171,6 +176,229 @@ function updateSelection() {
     ctx.textContent =
       "Em contexto: " + names.slice(0, 3).join(", ") + (n > 3 ? ` +${n - 3}` : "");
   }
+}
+
+// ── Dashboard (live totals via the Fanpage Karma MCP) ────────────────────
+// Each selected (network, profile) gets its followers + likes fetched once and
+// cached. Toggling a profile recomputes the totals in real time.
+async function syncDashboard() {
+  // Kick off a fetch for every freshly-selected profile we haven't loaded yet.
+  const pending = [];
+  for (const [k, p] of state.selected) {
+    const m = state.metrics.get(k);
+    if (m && m.status !== "error") continue;   // cached (or in-flight)
+    state.metrics.set(k, { status: "loading" });
+    pending.push(fetchMetrics(k, p));
+  }
+  renderDashboard();
+  scheduleInsights();
+  if (pending.length) await Promise.all(pending);
+}
+
+// ── LLM insights ─────────────────────────────────────────────────────────
+// A fixed set of questions re-asked whenever the selection changes, scoped to
+// the selected profiles and streamed into the bottom of the dashboard. Each
+// question is debounced (a burst of toggles collapses into one request) and
+// abortable (a new selection cancels the in-flight stream).
+const INSIGHTS = [
+  {
+    id: "best-network",
+    title: "Melhor desempenho",
+    question: "Que rede tem melhor desempenho para esta marca?",
+  },
+  {
+    id: "growth-content",
+    title: "Conteúdos que atraíram seguidores",
+    question:
+      "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento.",
+  },
+];
+
+function buildInsightSections() {
+  const host = $("#insights");
+  host.innerHTML = "";
+  INSIGHTS.forEach((ins) => {
+    const section = el("div", "dash-section");
+    section.id = `insight-${ins.id}`;
+    section.hidden = true;
+    section.innerHTML =
+      `<h3>${esc(ins.title)} <span class="insight-status" data-status="${ins.id}"></span></h3>
+       <div class="insight-body" data-body="${ins.id}"></div>`;
+    host.appendChild(section);
+    ins._timer = null;
+    ins._controller = null;
+    ins._seq = 0;
+  });
+}
+
+function scheduleInsights() {
+  const empty = state.selected.size === 0;
+  INSIGHTS.forEach((ins) => {
+    clearTimeout(ins._timer);
+    const section = $(`#insight-${ins.id}`);
+    if (empty) {
+      if (ins._controller) ins._controller.abort();
+      ins._seq++;                       // invalidate any in-flight stream
+      section.hidden = true;
+      $(`[data-body="${ins.id}"]`).innerHTML = "";
+      $(`[data-status="${ins.id}"]`).innerHTML = "";
+      return;
+    }
+    section.hidden = false;
+    $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
+    ins._timer = setTimeout(() => runInsight(ins), 900);
+  });
+}
+
+async function runInsight(ins) {
+  const body = $(`[data-body="${ins.id}"]`);
+  const status = $(`[data-status="${ins.id}"]`);
+  if (ins._controller) ins._controller.abort();
+  const controller = new AbortController();
+  ins._controller = controller;
+  const seq = ++ins._seq;
+
+  const profiles = [...state.selected.values()].map((p) => ({
+    network: p.network, profile_id: p.profile_id,
+    profile_name: p.profile_name, username: p.username,
+  }));
+
+  status.innerHTML = `<span class="spinner"></span> a analisar…`;
+  body.innerHTML = "";
+  let answer = "";
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles }),
+      signal: controller.signal,
+    });
+    await readSSE(res, (event, data) => {
+      if (seq !== ins._seq) return;     // a newer request superseded this one
+      if (event === "text") {
+        answer += (answer ? "\n\n" : "") + data.text;
+        body.innerHTML = renderMarkdown(answer);
+      } else if (event === "tool" && data.status === "running") {
+        status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
+      } else if (event === "error") {
+        body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
+      }
+    });
+    if (seq === ins._seq) status.innerHTML = "";
+  } catch (e) {
+    if (e.name === "AbortError" || seq !== ins._seq) return;
+    status.innerHTML = "";
+    body.innerHTML = `<div class="insight-error">⚠ ${esc(e.message)}</div>`;
+  }
+}
+
+async function fetchMetrics(k, p) {
+  try {
+    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
+    // Ignore if the profile was deselected while the request was in flight.
+    if (!state.selected.has(k)) { state.metrics.delete(k); return; }
+    state.metrics.set(k, { status: "done", followers: data.followers, likes: data.likes });
+  } catch (e) {
+    if (state.selected.has(k)) state.metrics.set(k, { status: "error", error: e.message });
+  }
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const selected = [...state.selected.entries()];
+  const n = selected.length;
+
+  // Context line + loading status.
+  const ctx = $("#dash-context");
+  ctx.textContent = n === 0
+    ? "Selecione redes de perfis à esquerda para ver os totais."
+    : `${n} rede${n === 1 ? "" : "s"} selecionada${n === 1 ? "" : "s"} · dados dos últimos 28 dias.`;
+
+  const loadingCount = selected.filter(([k]) => state.metrics.get(k)?.status === "loading").length;
+  $("#dash-status").innerHTML = loadingCount
+    ? `<span class="spinner"></span> A atualizar ${loadingCount}…`
+    : "";
+
+  // Totals (only count profiles whose metrics have arrived).
+  let totFollowers = 0, totLikes = 0;
+  const byNet = {};   // network -> { followers, likes, count }
+  for (const [k, p] of selected) {
+    const m = state.metrics.get(k);
+    const net = (byNet[p.network] ??= { followers: 0, likes: 0, count: 0 });
+    net.count++;
+    if (m?.status === "done") {
+      totFollowers += m.followers;
+      totLikes += m.likes;
+      net.followers += m.followers;
+      net.likes += m.likes;
+    }
+  }
+  setKpi("#kpi-followers", totFollowers);
+  setKpi("#kpi-likes", totLikes);
+
+  // Per-network breakdown bars.
+  const bd = $("#network-breakdown");
+  bd.innerHTML = "";
+  const nets = Object.keys(byNet).sort((a, b) => NETWORK_ORDER.indexOf(a) - NETWORK_ORDER.indexOf(b));
+  if (!nets.length) {
+    bd.innerHTML = `<div class="dash-empty">Nenhuma rede selecionada.</div>`;
+  } else {
+    const maxF = Math.max(1, ...nets.map((net) => byNet[net].followers));
+    const maxL = Math.max(1, ...nets.map((net) => byNet[net].likes));
+    nets.forEach((net) => {
+      const d = byNet[net];
+      const netCls = "net-" + (NETWORK_ORDER.includes(net) ? net : "default");
+      bd.appendChild(el("div", "net-row",
+        `<div class="net-row-head">
+           <span class="net-badge ${netCls}">${esc(net)}</span>
+           <span class="net-count">${d.count} perfil${d.count === 1 ? "" : "s"}</span>
+         </div>
+         <div class="net-metric">
+           <div class="net-metric-top"><span class="lbl">Seguidores</span><span class="val">${fmt(d.followers)}</span></div>
+           <div class="bar-track"><div class="bar-fill followers" style="width:${(d.followers / maxF) * 100}%"></div></div>
+         </div>
+         <div class="net-metric">
+           <div class="net-metric-top"><span class="lbl">Likes</span><span class="val">${fmt(d.likes)}</span></div>
+           <div class="bar-track"><div class="bar-fill likes" style="width:${(d.likes / maxL) * 100}%"></div></div>
+         </div>`));
+    });
+  }
+
+  // Per-profile list (shows loading / error state for each selected network).
+  const sn = $("#selected-nets");
+  const title = $("#selected-nets-title");
+  sn.innerHTML = "";
+  title.style.display = n ? "" : "none";
+  selected
+    .sort((a, b) => a[1].profile_name.localeCompare(b[1].profile_name))
+    .forEach(([k, p]) => {
+      const m = state.metrics.get(k);
+      const netCls = "net-" + (NETWORK_ORDER.includes(p.network) ? p.network : "default");
+      let nums, cls = "sel-net";
+      if (m?.status === "done") nums = `👥 ${fmt(m.followers)} · ❤ ${fmt(m.likes)}`;
+      else if (m?.status === "error") { nums = "erro"; cls += " error"; }
+      else nums = `<span class="spinner"></span>`;
+      sn.appendChild(el("div", cls,
+        `<span class="net-badge ${netCls}">${esc(p.network)}</span>
+         <span class="name">${esc(p.profile_name)}</span>
+         <span class="nums">${nums}</span>`));
+    });
+}
+
+function setKpi(sel, value) {
+  const node = $(sel);
+  const next = fmt(value);
+  if (node.textContent !== next && next !== "0") {
+    const card = node.closest(".kpi-card");
+    card.classList.remove("pulse");
+    void card.offsetWidth;   // restart the animation
+    card.classList.add("pulse");
+  }
+  node.textContent = next;
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────
@@ -404,13 +632,47 @@ function resetChat() {
   renderSuggestions();
 }
 
+// ── Panel resizing (drag the gutters between the three panels) ───────────
+function initResizers() {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  document.querySelectorAll(".resizer").forEach((r) => {
+    r.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const target = r.dataset.target;   // "left" (sidebar) or "mid" (dashboard)
+      const varName = target === "left" ? "--w-left" : "--w-mid";
+      const startX = e.clientX;
+      const startW = parseFloat(getComputedStyle(document.body).getPropertyValue(varName));
+      r.classList.add("dragging");
+      document.body.classList.add("resizing");
+
+      const onMove = (ev) => {
+        // Keep the chat panel usable: cap widths against the viewport.
+        const max = window.innerWidth - (target === "left" ? 520 : 300);
+        const w = clamp(startW + (ev.clientX - startX), 240, max);
+        document.body.style.setProperty(varName, w + "px");
+      };
+      const onUp = () => {
+        r.classList.remove("dragging");
+        document.body.classList.remove("resizing");
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadProfiles();
   renderSuggestions();
   updateSelection();
+  buildInsightSections();
+  renderDashboard();
+  initResizers();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
-  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); };
+  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };
   $("#reset-chat").onclick = resetChat;
   $("#schema-btn").onclick = openSchema;
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");

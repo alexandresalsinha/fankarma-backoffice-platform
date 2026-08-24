@@ -62,6 +62,36 @@ app.get("/api/profiles", async (_req, res) => {
   }
 });
 
+// ── REST: per-profile KPI metrics for the live dashboard ───────────────
+// Called once per selected (network, profile) via the MCP get_profile_metrics
+// tool. We only pull the two cross-network common keys we display, keeping the
+// payload small. Followers = total profile followers; Likes = likes on posts
+// in the period (defaults to the last 28 days).
+app.get("/api/metrics", async (req, res) => {
+  const network = String(req.query.network || "").toLowerCase();
+  const profile_id = String(req.query.profile_id || "");
+  if (!network || !profile_id) {
+    return res.status(400).json({ error: "network and profile_id are required" });
+  }
+  try {
+    const result = await callTool("get_profile_metrics", {
+      network,
+      profile_id,
+      metrics: "common_followers_count,common_likes_count",
+    });
+    const parsed = JSON.parse(contentToText(result));
+    const data = parsed?.data || {};
+    res.json({
+      network,
+      profile_id,
+      followers: Number(data.common_followers_count?.value) || 0,
+      likes: Number(data.common_likes_count?.value) || 0,
+    });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ── System prompt anchoring the assistant to the selected profiles ─────
 function buildSystemPrompt(profiles) {
   const today = new Date().toISOString().slice(0, 10);

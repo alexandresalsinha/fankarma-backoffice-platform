@@ -8,7 +8,9 @@
       "Bash(curl -s http://localhost:4000/api/profiles)",
       "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(\"total:\",j.total,\"| sample:\",j.profiles[0].profile_name,\"\\(\"+j.profiles[0].network+\"\\)\"\\)}\\)')",
       "Bash(curl -s http://localhost:4000/api/schema)",
-      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(\"tools:\",j.tools.map\\(t=>t.name\\).join\\(\", \"\\)\\)}\\)')"
+      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(\"tools:\",j.tools.map\\(t=>t.name\\).join\\(\", \"\\)\\)}\\)')",
+      "mcp__fanpagekarma__get_profile_metrics",
+      "Skill(dataviz)"
     ]
   }
 }
