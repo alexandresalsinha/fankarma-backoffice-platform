@@ -785,7 +785,8 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Início de sessão em breve.");
   };
 
-  $("#schema-btn").onclick = openSchema;
+  const schemaBtn = $("#schema-btn");
+  if (schemaBtn) schemaBtn.onclick = openSchema;   // footer button is optional
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
   $("#schema-modal").onclick = (e) => { if (e.target.id === "schema-modal") $("#schema-modal").classList.add("hidden"); };
 
