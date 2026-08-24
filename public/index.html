@@ -17,12 +17,6 @@
         <span id="platform-version" class="topbar-version" title="Versão da plataforma">v—</span>
       </div>
       <div class="topbar-actions">
-        <label class="model-picker" title="Modelo de LLM usado nas análises">
-          <span class="model-picker-label">Modelo</span>
-          <select id="model-select" aria-label="Selecionar modelo de LLM">
-            <option value="" disabled selected>A carregar…</option>
-          </select>
-        </label>
         <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações">⚙</button>
         <button id="login-btn" class="login-btn" type="button">Iniciar sessão</button>
       </div>
@@ -131,6 +125,38 @@
     </div>
 
     <button id="open-chat" class="open-chat-fab" type="button" title="Abrir chat" aria-label="Abrir chat de análise">💬</button>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-card">
+        <header>
+          <h3>Configurações da plataforma</h3>
+          <button id="settings-close" class="link-btn" type="button">Fechar</button>
+        </header>
+        <div class="settings-body">
+          <div class="setting-row">
+            <label class="setting-label" for="model-select">Modelo de LLM</label>
+            <p class="setting-hint">Modelo usado nas análises e no chat.</p>
+            <select id="model-select" aria-label="Selecionar modelo de LLM">
+              <option value="" disabled selected>A carregar…</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="fpk-auth-input">Chave da API Fanpage Karma</label>
+            <p class="setting-hint">
+              Cabeçalho <code>Authorization</code> usado nos pedidos à Fanpage Karma
+              (guardado em <code>FPK_AUTH</code>). Deixe em branco para manter a chave atual.
+            </p>
+            <input id="fpk-auth-input" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="A carregar…" />
+            <div class="setting-foot">
+              <span id="settings-status" class="settings-status"></span>
+              <button id="settings-save" class="login-btn" type="button">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="schema-modal" class="modal hidden">
       <div class="modal-card">

@@ -56,14 +56,10 @@ body {
 }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
 
-.model-picker { display: flex; align-items: center; gap: 8px; }
-.model-picker-label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
-  color: var(--muted); font-weight: 600;
-}
 #model-select {
   appearance: none;
-  padding: 7px 30px 7px 12px; border-radius: 9px; cursor: pointer;
+  width: 100%;
+  padding: 9px 32px 9px 12px; border-radius: 9px; cursor: pointer;
   background: var(--panel-2); border: 1px solid var(--border);
   color: var(--text); font-size: 13px; font-family: inherit; outline: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95a7' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -91,6 +87,27 @@ body {
 }
 .login-btn:hover { filter: brightness(1.08); }
 .login-btn:active { filter: brightness(0.95); }
+.login-btn:disabled { opacity: 0.55; cursor: default; filter: none; }
+
+/* ── Settings modal ───────────────────────────────────────── */
+.settings-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; }
+.setting-row { display: flex; flex-direction: column; gap: 6px; }
+.setting-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.setting-hint { font-size: 12px; color: var(--muted); margin: 0 0 4px; line-height: 1.5; }
+.setting-hint code {
+  font-size: 11px; padding: 1px 5px; border-radius: 5px;
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+#fpk-auth-input {
+  width: 100%; padding: 9px 12px; border-radius: 9px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+#fpk-auth-input:focus { border-color: var(--accent); }
+.setting-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 6px; }
+.settings-status { font-size: 12px; color: var(--muted); margin-right: auto; }
+.settings-status.ok { color: var(--good); }
+.settings-status.err { color: var(--bad); }
 
 /* ── Workspace (the three resizable panels) ───────────────── */
 .workspace {
@@ -389,7 +406,6 @@ body.chat-collapsed .open-chat-fab { display: grid; place-items: center; }
 @media (max-width: 980px) {
   .workspace, body.chat-collapsed .workspace { grid-template-columns: 1fr; }
   #sidebar, #dashboard, .resizer { display: none; }
-  .model-picker-label { display: none; }
   /* Mobile is chat-only — ignore the collapsed state here. */
   body.chat-collapsed #chat { display: flex; }
   body.chat-collapsed .open-chat-fab { display: none; }

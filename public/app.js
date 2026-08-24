@@ -88,9 +88,53 @@ async function loadConfig() {
       opt.selected = m === state.model;
       select.appendChild(opt);
     });
+
+    // Reflect the (masked) Fanpage Karma key so admins can see it is set.
+    const input = $("#fpk-auth-input");
+    input.value = "";
+    input.placeholder = data.fpkAuth?.configured
+      ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
+      : "Ainda não configurada";
   } catch (e) {
     select.innerHTML = `<option value="" disabled selected>Indisponível</option>`;
     console.error("Config load failed:", e.message);
+  }
+}
+
+async function saveSettings() {
+  const btn = $("#settings-save");
+  const status = $("#settings-status");
+  const input = $("#fpk-auth-input");
+  const fpkAuth = input.value.trim();
+
+  if (!fpkAuth) {
+    status.className = "settings-status";
+    status.textContent = "Nada para guardar.";
+    return;
+  }
+
+  btn.disabled = true;
+  status.className = "settings-status";
+  status.textContent = "A guardar…";
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fpkAuth }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Falha ao guardar");
+    input.value = "";
+    input.placeholder = data.fpkAuth?.configured
+      ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
+      : "Ainda não configurada";
+    status.className = "settings-status ok";
+    status.textContent = "Guardado ✓";
+  } catch (e) {
+    status.className = "settings-status err";
+    status.textContent = "⚠ " + e.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -713,10 +757,16 @@ document.addEventListener("DOMContentLoaded", () => {
     state.model = e.target.value;
     localStorage.setItem("llm-model", state.model);
   });
-  $("#settings-btn").onclick = () => {
-    // Settings panel is not implemented yet — placeholder until it is built out.
-    alert("Configurações em breve.");
+  const settingsModal = $("#settings-modal");
+  const openSettings = () => {
+    $("#settings-status").textContent = "";
+    settingsModal.classList.remove("hidden");
   };
+  const closeSettings = () => settingsModal.classList.add("hidden");
+  $("#settings-btn").onclick = openSettings;
+  $("#settings-close").onclick = closeSettings;
+  settingsModal.onclick = (e) => { if (e.target.id === "settings-modal") closeSettings(); };
+  $("#settings-save").onclick = saveSettings;
   $("#login-btn").onclick = () => {
     // Login flow is not implemented yet — placeholder until auth is wired up.
     alert("Início de sessão em breve.");
