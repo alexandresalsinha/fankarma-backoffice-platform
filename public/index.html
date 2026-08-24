@@ -6,6 +6,10 @@
     <title>Karma Full6 · Backoffice</title>
     <meta name="lang" content="pt" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <script>
+      // Set the theme before first paint to avoid a flash of the wrong theme.
+      try { document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark"; } catch (e) {}
+    </script>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
   </head>
@@ -133,6 +137,15 @@
           <button id="settings-close" class="link-btn" type="button">Fechar</button>
         </header>
         <div class="settings-body">
+          <div class="setting-row">
+            <label class="setting-label">Tema</label>
+            <p class="setting-hint">Aparência da interface.</p>
+            <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Selecionar tema">
+              <button type="button" class="theme-opt" data-theme="dark">🌙 Escuro</button>
+              <button type="button" class="theme-opt" data-theme="light">☀ Claro</button>
+            </div>
+          </div>
+
           <div class="setting-row">
             <label class="setting-label" for="model-select">Modelo de LLM</label>
             <p class="setting-hint">Modelo usado nas análises e no chat.</p>

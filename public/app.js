@@ -8,6 +8,7 @@ const state = {
   history: [],           // [{role, content}]
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
+  theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
@@ -66,6 +67,15 @@ const el = (tag, cls, html) => {
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// ── Theme (dark / light) ─────────────────────────────────────────────────
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("theme", theme);
+  document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) =>
+    b.classList.toggle("active", b.dataset.theme === theme));
+}
+
 // ── Top bar: platform version + LLM model picker ─────────────────────────
 async function loadConfig() {
   const select = $("#model-select");
@@ -107,27 +117,25 @@ async function saveSettings() {
   const input = $("#fpk-auth-input");
   const fpkAuth = input.value.trim();
 
-  if (!fpkAuth) {
-    status.className = "settings-status";
-    status.textContent = "Nada para guardar.";
-    return;
-  }
-
   btn.disabled = true;
   status.className = "settings-status";
   status.textContent = "A guardar…";
   try {
-    const res = await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fpkAuth }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Falha ao guardar");
-    input.value = "";
-    input.placeholder = data.fpkAuth?.configured
-      ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
-      : "Ainda não configurada";
+    // Theme and model are already applied + persisted the moment they change;
+    // only the API key needs a server round-trip, and only when one was typed.
+    if (fpkAuth) {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fpkAuth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha ao guardar");
+      input.value = "";
+      input.placeholder = data.fpkAuth?.configured
+        ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
+        : "Ainda não configurada";
+    }
     status.className = "settings-status ok";
     status.textContent = "Guardado ✓";
   } catch (e) {
@@ -767,6 +775,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#settings-close").onclick = closeSettings;
   settingsModal.onclick = (e) => { if (e.target.id === "settings-modal") closeSettings(); };
   $("#settings-save").onclick = saveSettings;
+
+  document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) => {
+    b.onclick = () => applyTheme(b.dataset.theme);
+  });
+  applyTheme(state.theme);   // sync the toggle's active state with the stored theme
   $("#login-btn").onclick = () => {
     // Login flow is not implemented yet — placeholder until auth is wired up.
     alert("Início de sessão em breve.");
