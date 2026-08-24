@@ -674,6 +674,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
   $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };
   $("#reset-chat").onclick = resetChat;
+  $("#collapse-chat").onclick = () => document.body.classList.add("chat-collapsed");
+  $("#open-chat").onclick = () => {
+    document.body.classList.remove("chat-collapsed");
+    $("#input").focus();
+  };
   $("#schema-btn").onclick = openSchema;
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
   $("#schema-modal").onclick = (e) => { if (e.target.id === "schema-modal") $("#schema-modal").classList.add("hidden"); };
