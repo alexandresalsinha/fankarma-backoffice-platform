@@ -7,6 +7,8 @@ const state = {
   search: "",
   history: [],           // [{role, content}]
   streaming: false,
+  model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
+  theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
@@ -64,6 +66,85 @@ const el = (tag, cls, html) => {
   return n;
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ── Theme (dark / light) ─────────────────────────────────────────────────
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("theme", theme);
+  document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) =>
+    b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+// ── Top bar: platform version + LLM model picker ─────────────────────────
+async function loadConfig() {
+  const select = $("#model-select");
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load config");
+
+    $("#platform-version").textContent = "v" + (data.version || "—");
+
+    const models = data.models?.length ? data.models : [data.defaultModel].filter(Boolean);
+    // Restore a previously-chosen model only if the server still offers it.
+    if (!models.includes(state.model)) state.model = data.defaultModel || models[0] || "";
+
+    select.innerHTML = "";
+    models.forEach((m) => {
+      const opt = el("option");
+      opt.value = m;
+      opt.textContent = m;
+      opt.selected = m === state.model;
+      select.appendChild(opt);
+    });
+
+    // Reflect the (masked) Fanpage Karma key so admins can see it is set.
+    const input = $("#fpk-auth-input");
+    input.value = "";
+    input.placeholder = data.fpkAuth?.configured
+      ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
+      : "Ainda não configurada";
+  } catch (e) {
+    select.innerHTML = `<option value="" disabled selected>Indisponível</option>`;
+    console.error("Config load failed:", e.message);
+  }
+}
+
+async function saveSettings() {
+  const btn = $("#settings-save");
+  const status = $("#settings-status");
+  const input = $("#fpk-auth-input");
+  const fpkAuth = input.value.trim();
+
+  btn.disabled = true;
+  status.className = "settings-status";
+  status.textContent = "A guardar…";
+  try {
+    // Theme and model are already applied + persisted the moment they change;
+    // only the API key needs a server round-trip, and only when one was typed.
+    if (fpkAuth) {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fpkAuth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha ao guardar");
+      input.value = "";
+      input.placeholder = data.fpkAuth?.configured
+        ? `Chave atual: ${data.fpkAuth.preview} — escreva para substituir`
+        : "Ainda não configurada";
+    }
+    status.className = "settings-status ok";
+    status.textContent = "Guardado ✓";
+  } catch (e) {
+    status.className = "settings-status err";
+    status.textContent = "⚠ " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 // ── Profiles ───────────────────────────────────────────────────────────
 async function loadProfiles() {
@@ -271,7 +352,7 @@ async function runInsight(ins) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles }),
+      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles, model: state.model }),
       signal: controller.signal,
     });
     await readSSE(res, (event, data) => {
@@ -446,7 +527,7 @@ async function send(text) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: state.history, profiles }),
+      body: JSON.stringify({ messages: state.history, profiles, model: state.model }),
     });
 
     await readSSE(res, (event, data) => {
@@ -664,6 +745,7 @@ function initResizers() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  loadConfig();
   loadProfiles();
   renderSuggestions();
   updateSelection();
@@ -679,7 +761,32 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.remove("chat-collapsed");
     $("#input").focus();
   };
-  $("#schema-btn").onclick = openSchema;
+  $("#model-select").addEventListener("change", (e) => {
+    state.model = e.target.value;
+    localStorage.setItem("llm-model", state.model);
+  });
+  const settingsModal = $("#settings-modal");
+  const openSettings = () => {
+    $("#settings-status").textContent = "";
+    settingsModal.classList.remove("hidden");
+  };
+  const closeSettings = () => settingsModal.classList.add("hidden");
+  $("#settings-btn").onclick = openSettings;
+  $("#settings-close").onclick = closeSettings;
+  settingsModal.onclick = (e) => { if (e.target.id === "settings-modal") closeSettings(); };
+  $("#settings-save").onclick = saveSettings;
+
+  document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) => {
+    b.onclick = () => applyTheme(b.dataset.theme);
+  });
+  applyTheme(state.theme);   // sync the toggle's active state with the stored theme
+  $("#login-btn").onclick = () => {
+    // Login flow is not implemented yet — placeholder until auth is wired up.
+    alert("Início de sessão em breve.");
+  };
+
+  const schemaBtn = $("#schema-btn");
+  if (schemaBtn) schemaBtn.onclick = openSchema;   // footer button is optional
   $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
   $("#schema-modal").onclick = (e) => { if (e.target.id === "schema-modal") $("#schema-modal").classList.add("hidden"); };
 

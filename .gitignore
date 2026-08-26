@@ -1,5 +1,6 @@
 node_modules/
 .env
+.env_backup
 *.log
 deploy.zip
 pack.ps1

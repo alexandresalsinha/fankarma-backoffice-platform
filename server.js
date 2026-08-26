@@ -1,14 +1,93 @@
 import "dotenv/config";
 import express from "express";
 import path from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { listTools, callTool, contentToText } from "./lib/mcp.js";
 import { createMessage } from "./lib/llm.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+// ── LLM models offered in the top-bar dropdown ─────────────────────────
+// The default mirrors lib/llm.js's resolution; the selectable list can be
+// overridden with LLM_MODELS (comma-separated). The configured default is
+// always present and shown first so the UI and backend never disagree.
+const DEFAULT_MODEL =
+  process.env.LLM_MODEL ||
+  process.env.ANTHROPIC_MODEL_PowerToys_clear_anthropic_default_llm ||
+  "claude-sonnet-5";
+const AVAILABLE_MODELS = (() => {
+  const fromEnv = (process.env.LLM_MODELS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const list = fromEnv.length ? fromEnv : [DEFAULT_MODEL, "deepseek-chat", "deepseek-reasoner"];
+  return [...new Set([DEFAULT_MODEL, ...list])];
+})();
+
+// ── Settings persistence (the ⚙ modal) ────────────────────────────────
+const ENV_PATH = path.join(__dirname, ".env");
+
+// Show only the tail of a secret so the UI can confirm it is set without
+// ever shipping the full value to the browser.
+function maskSecret(s) {
+  const v = String(s || "");
+  if (!v) return "";
+  return v.length <= 4 ? "••••" : "••••" + v.slice(-4);
+}
+
+// Upsert a single KEY=value line in .env, preserving all other lines/comments.
+// Values are written unquoted (matching the existing file style); newlines are
+// stripped so a pasted token can never inject extra env lines.
+function updateEnvFile(key, value) {
+  const clean = String(value).replace(/[\r\n]+/g, " ").trim();
+  let text = "";
+  try {
+    text = readFileSync(ENV_PATH, "utf8");
+  } catch {
+    text = "";
+  }
+  const line = `${key}=${clean}`;
+  const re = new RegExp(`^\\s*${key}\\s*=.*$`, "m");
+  if (re.test(text)) {
+    text = text.replace(re, line);
+  } else {
+    text = text.replace(/\s*$/, "") + `\n${line}\n`;
+  }
+  writeFileSync(ENV_PATH, text);
+}
+
+// ── REST: platform version + selectable LLM models + settings state ────
+app.get("/api/config", (_req, res) => {
+  res.json({
+    version: pkg.version,
+    models: AVAILABLE_MODELS,
+    defaultModel: DEFAULT_MODEL,
+    fpkAuth: { configured: Boolean(process.env.FPK_AUTH), preview: maskSecret(process.env.FPK_AUTH) },
+  });
+});
+
+// ── REST: update platform settings (persisted to .env + live process.env) ─
+app.post("/api/settings", (req, res) => {
+  const { fpkAuth } = req.body || {};
+  try {
+    if (typeof fpkAuth === "string" && fpkAuth.trim()) {
+      const value = fpkAuth.trim();
+      process.env.FPK_AUTH = value;   // takes effect immediately (read live per request)
+      updateEnvFile("FPK_AUTH", value);
+    }
+    res.json({
+      ok: true,
+      fpkAuth: { configured: Boolean(process.env.FPK_AUTH), preview: maskSecret(process.env.FPK_AUTH) },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── Cache the MCP tool schema (used both as "schema" and as LLM tools) ──
 let toolCache = null;
@@ -130,7 +209,10 @@ function buildSystemPrompt(profiles) {
 
 // ── Chat: agentic tool-use loop, streamed to the client as SSE ─────────
 app.post("/api/chat", async (req, res) => {
-  const { messages = [], profiles = [] } = req.body || {};
+  const { messages = [], profiles = [], model } = req.body || {};
+  // Only honour a model the server actually offers; otherwise fall back to the
+  // configured default (createMessage resolves undefined → default).
+  const chatModel = AVAILABLE_MODELS.includes(model) ? model : undefined;
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -163,7 +245,7 @@ app.post("/api/chat", async (req, res) => {
 
     const MAX_STEPS = 8;
     for (let step = 0; step < MAX_STEPS; step++) {
-      const reply = await createMessage({ system, messages: convo, tools });
+      const reply = await createMessage({ system, messages: convo, tools, model: chatModel });
       const content = Array.isArray(reply.content) ? reply.content : [];
 
       const text = content

@@ -6,19 +6,36 @@
     <title>Karma Full6 · Backoffice</title>
     <meta name="lang" content="pt" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <script>
+      // Set the theme before first paint to avoid a flash of the wrong theme.
+      try { document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark"; } catch (e) {}
+    </script>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
   </head>
   <body class="chat-collapsed">
+    <header id="topbar">
+      <div class="topbar-brand">
+        <span class="topbar-logo"></span>
+        <span class="topbar-title">Karma Full6</span>
+        <span id="platform-version" class="topbar-version" title="Versão da plataforma">v—</span>
+      </div>
+      <div class="topbar-actions">
+        <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações">⚙</button>
+        <button id="login-btn" class="login-btn" type="button">Iniciar sessão</button>
+      </div>
+    </header>
+
+    <div class="workspace">
     <aside id="sidebar">
       <header class="side-head">
-        <div class="brand">
+        <!-- <div class="brand">
           <span class="brand-dot"></span>
           <div>
             <h1>Karma Full6</h1>
             <p>Perfis ligados</p>
           </div>
-        </div>
+        </div> -->
         <div class="side-tools">
           <input id="search" type="search" placeholder="Procurar perfis…" autocomplete="off" />
           <div id="network-filters" class="chips"></div>
@@ -31,9 +48,9 @@
       <div id="profile-list" class="profile-list">
         <div class="loading">A carregar perfis…</div>
       </div>
-      <footer class="side-foot">
+      <!-- <footer class="side-foot">
         <button id="schema-btn" class="ghost-btn" type="button">⌗ Ver esquema de dados</button>
-      </footer>
+      </footer> -->
     </aside>
 
     <div class="resizer" id="resizer-1" data-target="left"></div>
@@ -109,8 +126,50 @@
         <button id="send" type="submit" title="Enviar">➤</button>
       </form>
     </main>
+    </div>
 
     <button id="open-chat" class="open-chat-fab" type="button" title="Abrir chat" aria-label="Abrir chat de análise">💬</button>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-card">
+        <header>
+          <h3>Configurações da plataforma</h3>
+          <button id="settings-close" class="link-btn" type="button">Fechar</button>
+        </header>
+        <div class="settings-body">
+          <div class="setting-row">
+            <label class="setting-label">Tema</label>
+            <p class="setting-hint">Aparência da interface.</p>
+            <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Selecionar tema">
+              <button type="button" class="theme-opt" data-theme="dark">🌙 Escuro</button>
+              <button type="button" class="theme-opt" data-theme="light">☀ Claro</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="model-select">Modelo de LLM</label>
+            <p class="setting-hint">Modelo usado nas análises e no chat.</p>
+            <select id="model-select" aria-label="Selecionar modelo de LLM">
+              <option value="" disabled selected>A carregar…</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="fpk-auth-input">Chave da API Fanpage Karma</label>
+            <p class="setting-hint">
+              Cabeçalho <code>Authorization</code> usado nos pedidos à Fanpage Karma
+              (guardado em <code>FPK_AUTH</code>). Deixe em branco para manter a chave atual.
+            </p>
+            <input id="fpk-auth-input" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="A carregar…" />
+            <div class="setting-foot">
+              <span id="settings-status" class="settings-status"></span>
+              <button id="settings-save" class="login-btn" type="button">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="schema-modal" class="modal hidden">
       <div class="modal-card">
