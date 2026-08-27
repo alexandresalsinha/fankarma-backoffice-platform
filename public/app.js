@@ -9,10 +9,39 @@ const state = {
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
+  dateRange: null,       // { preset, from, to } | null (null = API default, last 28 days)
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
 const fmt = (n) => nf.format(Math.round(Number(n) || 0));
+
+// ── Date-range helpers (for the dashboard filter) ────────────────────────
+const isoDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const fmtDatePt = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+
+// Compute {from, to} for a named preset relative to today.
+function presetRange(preset) {
+  const now = new Date();
+  const to = isoDate(now);
+  if (preset === "month") return { from: isoDate(new Date(now.getFullYear(), now.getMonth(), 1)), to };
+  if (preset === "year") return { from: isoDate(new Date(now.getFullYear(), 0, 1)), to };
+  if (preset === "last3") {
+    const d = new Date(now); d.setMonth(d.getMonth() - 3);
+    return { from: isoDate(d), to };
+  }
+  return { from: "", to };
+}
+
+const PRESET_LABELS = {
+  month: "Mês atual", year: "Ano atual", last3: "Últimos 3 meses", custom: "Intervalo de datas",
+};
+
+function rangeLabel() {
+  if (!state.dateRange) return "últimos 28 dias (predefinido)";
+  const { preset, from, to } = state.dateRange;
+  return `${PRESET_LABELS[preset] || "Intervalo"} · ${fmtDatePt(from)}–${fmtDatePt(to)}`;
+}
 
 const NETWORK_ORDER = ["instagram", "facebook", "tiktok", "youtube", "linkedin", "x", "threads", "bluesky", "pinterest"];
 const keyOf = (p) => `${p.network}:${p.profile_id}`;
@@ -352,7 +381,12 @@ async function runInsight(ins) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: ins.question }], profiles, model: state.model }),
+      body: JSON.stringify({
+        messages: [{ role: "user", content: ins.question }],
+        profiles,
+        model: state.model,
+        dateRange: state.dateRange || undefined,
+      }),
       signal: controller.signal,
     });
     await readSSE(res, (event, data) => {
@@ -376,7 +410,10 @@ async function runInsight(ins) {
 
 async function fetchMetrics(k, p) {
   try {
-    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
+    let url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
+    if (state.dateRange?.from && state.dateRange?.to) {
+      url += `&from=${state.dateRange.from}&to=${state.dateRange.to}`;
+    }
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
@@ -397,7 +434,7 @@ function renderDashboard() {
   const ctx = $("#dash-context");
   ctx.textContent = n === 0
     ? "Selecione redes de perfis à esquerda para ver os totais."
-    : `${n} rede${n === 1 ? "" : "s"} selecionada${n === 1 ? "" : "s"} · dados dos últimos 28 dias.`;
+    : `${n} rede${n === 1 ? "" : "s"} selecionada${n === 1 ? "" : "s"} · ${rangeLabel()}.`;
 
   const loadingCount = selected.filter(([k]) => state.metrics.get(k)?.status === "loading").length;
   $("#dash-status").innerHTML = loadingCount
@@ -744,6 +781,41 @@ function initResizers() {
   });
 }
 
+// ── Date filter (drives the dashboard KPIs + LLM insight queries) ────────
+function initDateFilter() {
+  const preset = $("#range-preset");
+  const custom = $("#custom-range");
+
+  const toggleCustom = () => {
+    const isCustom = preset.value === "custom";
+    custom.hidden = !isCustom;
+    if (isCustom && !$("#range-to").value) {
+      $("#range-to").value = isoDate(new Date());   // sensible default end date
+    }
+  };
+  preset.addEventListener("change", toggleCustom);
+  toggleCustom();
+
+  $("#apply-range").onclick = applyDateFilter;
+}
+
+function applyDateFilter() {
+  const preset = $("#range-preset").value;
+  let range;
+  if (preset === "custom") {
+    const from = $("#range-from").value;
+    const to = $("#range-to").value;
+    if (!from || !to) { $("#range-from").focus(); return; }   // both dates required
+    if (from > to) { $("#range-from").focus(); return; }      // guard inverted range
+    range = { preset, from, to };
+  } else {
+    range = { preset, ...presetRange(preset) };
+  }
+  state.dateRange = range;
+  state.metrics.clear();        // KPIs are period-dependent → refetch under the new range
+  syncDashboard();              // refetches metrics + re-runs the LLM insights
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadConfig();
   loadProfiles();
@@ -752,6 +824,7 @@ document.addEventListener("DOMContentLoaded", () => {
   buildInsightSections();
   renderDashboard();
   initResizers();
+  initDateFilter();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
   $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };

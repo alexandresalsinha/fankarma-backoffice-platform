@@ -153,10 +153,13 @@ app.get("/api/metrics", async (req, res) => {
     return res.status(400).json({ error: "network and profile_id are required" });
   }
   try {
+    const from = String(req.query.from || "");
+    const to = String(req.query.to || "");
     const result = await callTool("get_profile_metrics", {
       network,
       profile_id,
       metrics: "common_followers_count,common_likes_count",
+      ...(from && to ? { from, to } : {}),
     });
     const parsed = JSON.parse(contentToText(result));
     const data = parsed?.data || {};
@@ -172,14 +175,17 @@ app.get("/api/metrics", async (req, res) => {
 });
 
 // ── System prompt anchoring the assistant to the selected profiles ─────
-function buildSystemPrompt(profiles) {
+function buildSystemPrompt(profiles, dateRange) {
   const today = new Date().toISOString().slice(0, 10);
+  const hasRange = dateRange?.from && dateRange?.to;
   const lines = [
     "RESPONDE SEMPRE EM PORTUGUÊS DE PORTUGAL. Even if the user writes in English or another language, every word of your reply — text, table headers, explanations — MUST be in European Portuguese (português de Portugal). This overrides everything else.",
     "",
     "You are the analytics assistant inside a Fanpage Karma backoffice.",
     "You answer questions about social-media profiles using the Fanpage Karma tools available to you.",
-    `Today's date is ${today}. When a tool needs a date range and none is given, omit the dates (the API defaults to the last 28 days).`,
+    hasRange
+      ? `Today's date is ${today}. The user has selected a date range: from=${dateRange.from} to=${dateRange.to}. For EVERY tool call that accepts a date range, you MUST pass from=${dateRange.from} and to=${dateRange.to}. Do not use any other range. When describing the period in your answer, refer to this range.`
+      : `Today's date is ${today}. When a tool needs a date range and none is given, omit the dates (the API defaults to the last 28 days).`,
     "",
     "Guidelines:",
     "- Use the tools to fetch real data before answering; never invent metrics.",
@@ -209,7 +215,7 @@ function buildSystemPrompt(profiles) {
 
 // ── Chat: agentic tool-use loop, streamed to the client as SSE ─────────
 app.post("/api/chat", async (req, res) => {
-  const { messages = [], profiles = [], model } = req.body || {};
+  const { messages = [], profiles = [], model, dateRange = null } = req.body || {};
   // Only honour a model the server actually offers; otherwise fall back to the
   // configured default (createMessage resolves undefined → default).
   const chatModel = AVAILABLE_MODELS.includes(model) ? model : undefined;
@@ -225,7 +231,7 @@ app.post("/api/chat", async (req, res) => {
   try {
     const mcpTools = await getTools();
     const tools = toLLMTools(mcpTools);
-    const system = buildSystemPrompt(profiles);
+    const system = buildSystemPrompt(profiles, dateRange);
 
     // Seed conversation with the client-side history (plain-text turns).
     const convo = messages.map((m) => ({

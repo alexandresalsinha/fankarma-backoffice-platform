@@ -57,11 +57,27 @@
 
     <section id="dashboard">
       <header class="dash-head">
-        <div>
-          <h2>Dashboard</h2>
-          <p id="dash-context">Selecione redes de perfis à esquerda para ver os totais.</p>
+        <div class="dash-head-top">
+          <div>
+            <h2>Dashboard</h2>
+            <p id="dash-context">Selecione redes de perfis à esquerda para ver os totais.</p>
+          </div>
+          <span id="dash-status" class="dash-status"></span>
         </div>
-        <span id="dash-status" class="dash-status"></span>
+        <div class="dash-filter">
+          <select id="range-preset" class="range-select">
+            <option value="month">Mês atual</option>
+            <option value="year">Ano atual</option>
+            <option value="last3">Últimos 3 meses</option>
+            <option value="custom">Intervalo de datas</option>
+          </select>
+          <div id="custom-range" class="custom-range" hidden>
+            <input type="date" id="range-from" class="date-input" />
+            <span class="range-sep">até</span>
+            <input type="date" id="range-to" class="date-input" />
+          </div>
+          <button id="apply-range" class="apply-btn" type="button">Aplicar</button>
+        </div>
       </header>
 
       <div id="dash-body" class="dash-body">
