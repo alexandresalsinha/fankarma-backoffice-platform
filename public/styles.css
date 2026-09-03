@@ -335,6 +335,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 .sel-net.error .nums { color: var(--bad); }
 
 .dash-section h3 { display: flex; align-items: center; gap: 8px; }
+.dash-section h3 .copy-btn { margin-left: auto; }
+
+.copy-btn {
+  padding: 3px 9px; border-radius: 7px; cursor: pointer; font-size: 11px; font-weight: 500;
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  text-transform: none; letter-spacing: 0; line-height: 1.6; flex: none;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--text); }
+.copy-btn.copied { border-color: var(--accent); color: var(--accent); }
 .insight-status { font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
 .insight-status .spinner { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .insight-body {
@@ -402,6 +411,7 @@ body.chat-collapsed .open-chat-fab { display: grid; place-items: center; }
 .msg.assistant .avatar { background: linear-gradient(135deg, #5b8cff, #9b5bff); }
 .msg .body { flex: 1; min-width: 0; padding-top: 3px; }
 .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.msg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bubble { line-height: 1.6; }
 .bubble p { margin: 0 0 10px; }
 .bubble p:last-child { margin-bottom: 0; }
@@ -436,8 +446,14 @@ body.chat-collapsed .open-chat-fab { display: grid; place-items: center; }
 #send {
   width: 44px; height: 44px; border-radius: 12px; border: none; cursor: pointer;
   background: var(--accent); color: #fff; font-size: 16px; flex: none;
+  padding: 0; display: grid; place-items: center;
 }
 #send:disabled { opacity: 0.4; cursor: not-allowed; }
+#send.loading { opacity: 1; cursor: wait; }
+#send.loading .spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
+}
 
 /* ── Modal ───────────────────────────────────────────────── */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: grid; place-items: center; z-index: 20; }

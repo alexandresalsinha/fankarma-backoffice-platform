@@ -334,10 +334,12 @@ function buildInsightSections() {
     section.innerHTML =
       `<h3>${esc(ins.title)} <span class="insight-status" data-status="${ins.id}"></span></h3>
        <div class="insight-body" data-body="${ins.id}"></div>`;
+    addCopyButton(section.querySelector("h3"), () => (ins._answer || "").trim());
     host.appendChild(section);
     ins._timer = null;
     ins._controller = null;
     ins._seq = 0;
+    ins._answer = "";
   });
 }
 
@@ -376,6 +378,7 @@ async function runInsight(ins) {
   status.innerHTML = `<span class="spinner"></span> a analisar…`;
   body.innerHTML = "";
   let answer = "";
+  ins._answer = "";
 
   try {
     const res = await fetch("/api/chat", {
@@ -393,6 +396,7 @@ async function runInsight(ins) {
       if (seq !== ins._seq) return;     // a newer request superseded this one
       if (event === "text") {
         answer += (answer ? "\n\n" : "") + data.text;
+        ins._answer = answer;
         body.innerHTML = renderMarkdown(answer);
       } else if (event === "tool" && data.status === "running") {
         status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
@@ -520,22 +524,44 @@ function setKpi(sel, value) {
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────
-function addMessage(role) {
+// Copies text to the clipboard and gives the triggering button brief feedback.
+async function copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = btn.textContent;
+    btn.classList.add("copied");
+    btn.textContent = "✓ Copiado";
+    setTimeout(() => { btn.classList.remove("copied"); btn.textContent = original; }, 1500);
+  } catch (e) {
+    console.error("Copy failed:", e.message);
+  }
+}
+
+function addCopyButton(host, getText) {
+  const btn = el("button", "copy-btn", "📋 Copiar");
+  btn.type = "button";
+  btn.title = "Copiar resposta";
+  btn.onclick = () => copyToClipboard(getText(), btn);
+  host.appendChild(btn);
+  return btn;
+}
+
+// getText, when given, supplies the raw Markdown source for the copy button
+// (preserves newlines/tables) instead of the flattened rendered text.
+function addMessage(role, getText) {
   const empty = $(".empty-chat");
   if (empty) empty.remove();
   const msg = el("div", `msg ${role}`);
-  msg.append(
-    el("div", "avatar", role === "user" ? "🧑" : "📊"),
-    (() => {
-      const body = el("div", "body");
-      body.append(el("div", "role", role === "user" ? "Você" : "Assistente"));
-      body.append(el("div", "bubble"));
-      return body;
-    })(),
-  );
+  const body = el("div", "body");
+  const head = el("div", "msg-head");
+  head.append(el("div", "role", role === "user" ? "Você" : "Assistente"));
+  const bubble = el("div", "bubble");
+  body.append(head, bubble);
+  if (role === "assistant") addCopyButton(head, getText || (() => bubble.textContent.trim()));
+  msg.append(el("div", "avatar", role === "user" ? "🧑" : "📊"), body);
   $("#messages").appendChild(msg);
   scrollDown();
-  return msg.querySelector(".bubble");
+  return bubble;
 }
 
 function scrollDown() {
@@ -546,14 +572,18 @@ function scrollDown() {
 async function send(text) {
   if (!text.trim() || state.streaming) return;
   state.streaming = true;
-  $("#send").disabled = true;
+  const sendBtn = $("#send");
+  const sendBtnHTML = sendBtn.innerHTML;
+  sendBtn.disabled = true;
+  sendBtn.classList.add("loading");
+  sendBtn.innerHTML = '<span class="spinner"></span>';
 
   const userBubble = addMessage("user");
   userBubble.textContent = text;
   state.history.push({ role: "user", content: text });
 
-  const asstBubble = addMessage("assistant");
   let answer = "";
+  const asstBubble = addMessage("assistant", () => answer.trim());
 
   const profiles = [...state.selected.values()].map((p) => ({
     network: p.network, profile_id: p.profile_id,
@@ -584,7 +614,9 @@ async function send(text) {
     asstBubble.innerHTML += `<div class="tool-call error">⚠ ${esc(e.message)}</div>`;
   } finally {
     state.streaming = false;
-    $("#send").disabled = false;
+    sendBtn.classList.remove("loading");
+    sendBtn.innerHTML = sendBtnHTML;
+    sendBtn.disabled = false;
   }
 }
 
