@@ -25,7 +25,7 @@ const AVAILABLE_MODELS = (() => {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const list = fromEnv.length ? fromEnv : [DEFAULT_MODEL, "deepseek-chat", "deepseek-reasoner"];
+  const list = fromEnv.length ? fromEnv : [DEFAULT_MODEL, "deepseek/deepseek-chat", "openai/gpt-4o"];
   return [...new Set([DEFAULT_MODEL, ...list])];
 })();
 
