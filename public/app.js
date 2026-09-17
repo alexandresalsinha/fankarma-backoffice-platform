@@ -320,7 +320,7 @@ const INSIGHTS = [
     id: "growth-content",
     title: "Conteúdos que atraíram seguidores",
     question:
-      "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento.",
+      "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento. Mostra-me também em gráficos.",
   },
 ];
 
@@ -677,6 +677,16 @@ function renderMarkdown(md) {
   while (i < lines.length) {
     const line = lines[i];
 
+    // Fenced code block (```lang ... ```) — a ```chart block renders as a bar chart.
+    const fence = line.match(/^```(\w*)\s*$/);
+    if (fence) {
+      i++;
+      const body = [];
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { body.push(lines[i]); i++; }
+      i++; // skip closing fence
+      html += fence[1] === "chart" ? renderChartBlock(body) : `<pre><code>${esc(body.join("\n"))}</code></pre>`;
+      continue;
+    }
     // Table
     if (line.includes("|") && lines[i + 1] && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1])) {
       const header = line.split("|").filter((c) => c.trim() !== "");
@@ -713,12 +723,36 @@ function renderMarkdown(md) {
     if (line.trim() === "") { i++; continue; }
     // Paragraph
     let para = line; i++;
-    while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,4}\s|[-*]\s|\d+\.\s)/.test(lines[i]) && !lines[i].includes("|")) {
+    while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,4}\s|[-*]\s|\d+\.\s|```)/.test(lines[i]) && !lines[i].includes("|")) {
       para += " " + lines[i]; i++;
     }
     html += `<p>${inline(para)}</p>`;
   }
   return html;
+}
+
+// Parses a ```chart block ("optional title" line, then "Label: value" rows)
+// into a horizontal bar chart, reusing the same .bar-track/.bar-fill marks
+// as the dashboard's followers/likes comparison.
+function renderChartBlock(lines) {
+  const rowRe = /^\s*(.+?):\s*(-?[\d.,]+)\s*$/;
+  let title = "";
+  const items = [];
+  for (const raw of lines) {
+    if (!raw.trim()) continue;
+    const m = raw.match(rowRe);
+    if (m) items.push({ label: m[1].trim(), value: Number(m[2].replace(/[^\d-]/g, "")) || 0 });
+    else if (!items.length && !title) title = raw.trim();
+  }
+  if (!items.length) return "";
+
+  const max = Math.max(1, ...items.map((it) => it.value));
+  const rows = items.map((it) => `
+    <div class="insight-chart-row">
+      <div class="insight-chart-row-top"><span class="lbl">${esc(it.label)}</span><span class="val">${fmt(it.value)}</span></div>
+      <div class="bar-track"><div class="bar-fill insight" style="width:${(it.value / max) * 100}%"></div></div>
+    </div>`).join("");
+  return `<div class="insight-chart">${title ? `<div class="insight-chart-title">${esc(title)}</div>` : ""}${rows}</div>`;
 }
 
 // ── Schema modal ─────────────────────────────────────────────────────────

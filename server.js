@@ -192,6 +192,14 @@ function buildSystemPrompt(profiles, dateRange) {
     "- `network` values must be lowercase (facebook, instagram, youtube, linkedin, tiktok, ...).",
     "- Use `list_available_metrics` when you are unsure which metric keys a network/endpoint supports.",
     "- Answer concisely in Markdown, in Portuguese. Use tables when comparing profiles, and format large numbers readably (e.g. 2.393).",
+    "- When asked to show data as a graphic/chart, NEVER draw bars yourself with text/unicode characters (e.g. █, ▓, ASCII art). Instead output a fenced code block tagged `chart` with an optional title on the first line, then one `Label: value` pair per line, where value is a plain integer with no thousands separators, units or symbols. Example:",
+    "  ```chart",
+    "  Conteúdos que mais atraíram seguidores",
+    "  Vídeo de bastidores do lançamento: 480",
+    "  Direto com a equipa: 310",
+    "  Carrossel de bastidores: 150",
+    "  ```",
+    "  Keep labels short (under ~40 characters). You may still add normal Markdown text before/after the block to explain the data. This chart block is rendered as a real bar chart by the client — never substitute it with a Markdown table of dashes/bars.",
   ];
 
   if (profiles?.length) {

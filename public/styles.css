@@ -357,6 +357,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 .insight-body table { border-collapse: collapse; margin: 6px 0; font-size: 12px; width: 100%; }
 .insight-body th, .insight-body td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
 .insight-body th { background: var(--panel); }
+
+.insight-chart { margin: 10px 0; }
+.insight-chart-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 0 0 10px; }
+.insight-chart-row { margin: 9px 0; }
+.insight-chart-row-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.insight-chart-row-top .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.insight-chart-row-top .val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+.bar-fill.insight { background: var(--accent); }
 .insight-body ul, .insight-body ol { margin: 0 0 8px; padding-left: 18px; }
 .insight-body code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .insight-body strong { color: var(--text); }

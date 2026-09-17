@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env_backup
+.env deepseek
+.env openrouter
 *.log
 deploy.zip
 pack.ps1
