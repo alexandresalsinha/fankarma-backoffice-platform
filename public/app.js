@@ -731,28 +731,69 @@ function renderMarkdown(md) {
   return html;
 }
 
-// Parses a ```chart block ("optional title" line, then "Label: value" rows)
-// into a horizontal bar chart, reusing the same .bar-track/.bar-fill marks
-// as the dashboard's followers/likes comparison.
-function renderChartBlock(lines) {
-  const rowRe = /^\s*(.+?):\s*(-?[\d.,]+)\s*$/;
-  let title = "";
-  const items = [];
-  for (const raw of lines) {
-    if (!raw.trim()) continue;
-    const m = raw.match(rowRe);
-    if (m) items.push({ label: m[1].trim(), value: Number(m[2].replace(/[^\d-]/g, "")) || 0 });
-    else if (!items.length && !title) title = raw.trim();
-  }
-  if (!items.length) return "";
+const CHART_PLOT_H = 120; // px — shared bar-area height, used for both bar scaling and gridlines
 
-  const max = Math.max(1, ...items.map((it) => it.value));
-  const rows = items.map((it) => `
-    <div class="insight-chart-row">
-      <div class="insight-chart-row-top"><span class="lbl">${esc(it.label)}</span><span class="val">${fmt(it.value)}</span></div>
-      <div class="bar-track"><div class="bar-fill insight" style="width:${(it.value / max) * 100}%"></div></div>
-    </div>`).join("");
-  return `<div class="insight-chart">${title ? `<div class="insight-chart-title">${esc(title)}</div>` : ""}${rows}</div>`;
+// Parses a ```chart block into a vertical (grouped, multi-series) bar chart.
+// Pipe format: optional title line, then a header row "Categoria | Série 1 | Série 2 | ...",
+// then one "Rótulo | valor1 | valor2 | ..." row per category. A colon-format
+// fallback ("Label: value") is also accepted for a single series.
+function renderChartBlock(lines) {
+  const trimmed = lines.map((l) => l.trim()).filter(Boolean);
+  if (!trimmed.length) return "";
+
+  let title = "", seriesNames = [];
+  const rows = [];
+  const num = (s) => Number(String(s).replace(/[^\d-]/g, "")) || 0;
+
+  if (trimmed.some((l) => l.includes("|"))) {
+    let header = null;
+    for (const line of trimmed) {
+      if (!line.includes("|")) { if (!header) title = line; continue; }
+      const cells = line.split("|").map((c) => c.trim()).filter((c) => c !== "");
+      if (!header) { header = cells; seriesNames = cells.slice(1); continue; }
+      rows.push({ label: cells[0], values: cells.slice(1).map(num) });
+    }
+  } else {
+    seriesNames = ["Valor"];
+    const rowRe = /^(.+?):\s*(-?[\d.,]+)\s*$/;
+    for (const line of trimmed) {
+      const m = line.match(rowRe);
+      if (m) rows.push({ label: m[1].trim(), values: [num(m[2])] });
+      else if (!rows.length && !title) title = line;
+    }
+  }
+  if (!rows.length || !seriesNames.length) return "";
+
+  const seriesColor = (idx) => `var(--series-${(idx % 8) + 1})`;
+  const max = Math.max(1, ...rows.flatMap((r) => r.values));
+
+  const legend = seriesNames.length > 1
+    ? `<div class="insight-chart-legend">${seriesNames.map((s, idx) =>
+        `<span class="insight-chart-legend-item"><span class="insight-chart-swatch" style="background:${seriesColor(idx)}"></span>${esc(s)}</span>`
+      ).join("")}</div>`
+    : "";
+
+  const groups = rows.map((r) => {
+    const cols = r.values.map((v, idx) => `
+      <div class="insight-chart-col">
+        <span class="insight-chart-value">${fmt(v)}</span>
+        <div class="insight-chart-bar" style="height:${Math.max(2, Math.round((v / max) * CHART_PLOT_H))}px; background:${seriesColor(idx)}"></div>
+      </div>`).join("");
+    return `<div class="insight-chart-group">
+      <div class="insight-chart-bars">${cols}</div>
+      <div class="insight-chart-cat-label" title="${esc(r.label)}">${esc(r.label)}</div>
+    </div>`;
+  }).join("");
+
+  const gridlines = [0, CHART_PLOT_H / 2, CHART_PLOT_H]
+    .map((top) => `<div class="insight-chart-gridline${top === CHART_PLOT_H ? " base" : ""}" style="top:${top}px"></div>`)
+    .join("");
+
+  return `<div class="insight-chart">
+    ${title ? `<div class="insight-chart-title">${esc(title)}</div>` : ""}
+    ${legend}
+    <div class="insight-chart-plot">${gridlines}<div class="insight-chart-groups">${groups}</div></div>
+  </div>`;
 }
 
 // ── Schema modal ─────────────────────────────────────────────────────────

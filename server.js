@@ -192,14 +192,15 @@ function buildSystemPrompt(profiles, dateRange) {
     "- `network` values must be lowercase (facebook, instagram, youtube, linkedin, tiktok, ...).",
     "- Use `list_available_metrics` when you are unsure which metric keys a network/endpoint supports.",
     "- Answer concisely in Markdown, in Portuguese. Use tables when comparing profiles, and format large numbers readably (e.g. 2.393).",
-    "- When asked to show data as a graphic/chart, NEVER draw bars yourself with text/unicode characters (e.g. █, ▓, ASCII art). Instead output a fenced code block tagged `chart` with an optional title on the first line, then one `Label: value` pair per line, where value is a plain integer with no thousands separators, units or symbols. Example:",
+    "- When asked to show data as a graphic/chart, NEVER draw bars yourself with text/unicode characters (e.g. █, ▓, ASCII art). Instead output a fenced code block tagged `chart` — the client renders it as a real vertical bar chart. Format: an optional title on its own first line, then a header row `Categoria | Série 1 | Série 2 | ...` (list every metric/variable you want plotted as its own series), then one data row per category as `Rótulo | valor1 | valor2 | ...`, using `|` to separate columns. Values must be plain integers (no thousands separators, units or % symbols). Example with two variables:",
     "  ```chart",
     "  Conteúdos que mais atraíram seguidores",
-    "  Vídeo de bastidores do lançamento: 480",
-    "  Direto com a equipa: 310",
-    "  Carrossel de bastidores: 150",
+    "  Conteúdo | Novos seguidores | Gostos",
+    "  Vídeo de bastidores do lançamento | 480 | 1200",
+    "  Direto com a equipa | 310 | 640",
+    "  Carrossel de bastidores | 150 | 300",
     "  ```",
-    "  Keep labels short (under ~40 characters). You may still add normal Markdown text before/after the block to explain the data. This chart block is rendered as a real bar chart by the client — never substitute it with a Markdown table of dashes/bars.",
+    "  For a single metric still include the header row with one series name, e.g. `Conteúdo | Novos seguidores`. Keep category labels short (under ~30 characters), and use at most ~6 categories and ~4 series per chart. You may still add normal Markdown text before/after the block to explain the data — never substitute the chart with a Markdown table of dashes/bars or ASCII art.",
   ];
 
   if (profiles?.length) {

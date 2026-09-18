@@ -3,6 +3,7 @@ node_modules/
 .env_backup
 .env deepseek
 .env openrouter
+.env claude-opus-5
 *.log
 deploy.zip
 pack.ps1
