@@ -6,6 +6,8 @@ node_modules/
 .env claude-opus-5
 .env claude-opus-5 copy
 .env deepseek openAI
+.env deepseek old
+.env deepseek openAI copy
 *.log
 deploy.zip
 pack.ps1
