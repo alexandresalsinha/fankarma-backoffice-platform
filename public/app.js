@@ -15,7 +15,7 @@ const state = {
 const nf = new Intl.NumberFormat("pt-PT");
 const fmt = (n) => nf.format(Math.round(Number(n) || 0));
 
-// ── Date-range helpers (for the dashboard filter) ────────────────────────
+// ── Date-range helpers (for the insight questions' scope) ────────────────
 const isoDate = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const fmtDatePt = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
@@ -37,6 +37,8 @@ const PRESET_LABELS = {
   month: "Mês atual", year: "Ano atual", last3: "Últimos 3 meses", custom: "Intervalo de datas",
 };
 
+// Describes the range currently applied to the insight questions (not the
+// KPI totals, which always use the API's default 28-day window).
 function rangeLabel() {
   if (!state.dateRange) return "últimos 28 dias (predefinido)";
   const { preset, from, to } = state.dateRange;
@@ -272,7 +274,7 @@ function profileRow(p) {
     renderProfiles();
     updateSelection();
     invalidateInsights();
-    syncDashboard();
+    renderDashboard();   // reflect the new selection; KPI metrics only refresh on "Aplicar"
   };
   return row;
 }
@@ -378,8 +380,9 @@ function invalidateInsights() {
   });
 }
 
-// Runs the checked insight questions for the current profile selection.
-function applyInsights() {
+// Runs the checked insight questions for the current profile selection
+// (and current date range). Does not touch the KPI metrics.
+function runCheckedInsights() {
   invalidateInsights();
   if (state.selected.size === 0) return;
   INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
@@ -387,6 +390,13 @@ function applyInsights() {
     $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
     runInsight(ins);
   });
+}
+
+// Left-panel "Aplicar": the only place KPI metrics get (re)fetched, and also
+// runs the checked insight questions for the current selection.
+function applySelection() {
+  syncDashboard();
+  runCheckedInsights();
 }
 
 async function runInsight(ins) {
@@ -441,10 +451,9 @@ async function runInsight(ins) {
 
 async function fetchMetrics(k, p) {
   try {
-    let url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
-    if (state.dateRange?.from && state.dateRange?.to) {
-      url += `&from=${state.dateRange.from}&to=${state.dateRange.to}`;
-    }
+    // KPI totals always reflect the API's default window (last 28 days) —
+    // the date-range filter only scopes the LLM insight questions.
+    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
@@ -530,7 +539,8 @@ function renderDashboard() {
       let nums, cls = "sel-net";
       if (m?.status === "done") nums = `👥 ${fmt(m.followers)} · ❤ ${fmt(m.likes)}`;
       else if (m?.status === "error") { nums = "erro"; cls += " error"; }
-      else nums = `<span class="spinner"></span>`;
+      else if (m?.status === "loading") nums = `<span class="spinner"></span>`;
+      else { nums = "— por aplicar"; cls += " pending"; }
       sn.appendChild(el("div", cls,
         `<span class="net-badge ${netCls}">${esc(p.network)}</span>
          <span class="name">${esc(p.profile_name)}</span>
@@ -946,9 +956,10 @@ function applyDateFilter() {
     range = { preset, ...presetRange(preset) };
   }
   state.dateRange = range;
-  state.metrics.clear();        // KPIs are period-dependent → refetch under the new range
-  syncDashboard();              // refetches metrics for the selected networks
-  applyInsights();              // re-runs the checked insight questions under the new range
+  renderDashboard();   // reflect the newly applied range in the "Dashboard" header
+  // KPI metrics are NOT refetched here — they only update via the left panel's
+  // "Aplicar". This range only scopes the LLM insight questions.
+  runCheckedInsights();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -958,7 +969,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateSelection();
   buildInsightSections();
   renderInsightChecklist();
-  $("#apply-insights").onclick = applyInsights;
+  $("#apply-insights").onclick = applySelection;
   renderDashboard();
   initResizers();
   initDateFilter();
