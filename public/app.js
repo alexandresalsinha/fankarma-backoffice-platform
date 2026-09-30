@@ -271,6 +271,7 @@ function profileRow(p) {
     else state.selected.set(k, p);
     renderProfiles();
     updateSelection();
+    invalidateInsights();
     syncDashboard();
   };
   return row;
@@ -279,6 +280,8 @@ function profileRow(p) {
 function updateSelection() {
   const n = state.selected.size;
   $("#selection-count").textContent = `${n} selecionado${n === 1 ? "" : "s"}`;
+  const applyBtn = $("#apply-insights");
+  if (applyBtn) applyBtn.disabled = n === 0;
   const ctx = $("#context-line");
   if (n === 0) ctx.textContent = "Selecione perfis à esquerda para definir o âmbito das suas perguntas.";
   else {
@@ -301,15 +304,12 @@ async function syncDashboard() {
     pending.push(fetchMetrics(k, p));
   }
   renderDashboard();
-  scheduleInsights();
   if (pending.length) await Promise.all(pending);
 }
 
 // ── LLM insights ─────────────────────────────────────────────────────────
-// A fixed set of questions re-asked whenever the selection changes, scoped to
-// the selected profiles and streamed into the bottom of the dashboard. Each
-// question is debounced (a burst of toggles collapses into one request) and
-// abortable (a new selection cancels the in-flight stream).
+// A curated set of questions the user can opt into via checkboxes; nothing
+// runs until "Aplicar" is pressed, scoped to the currently selected profiles.
 const INSIGHTS = [
   {
     id: "best-network",
@@ -324,6 +324,9 @@ const INSIGHTS = [
   },
 ];
 
+// Which insight questions are checked in the picker (all checked by default).
+state.insightSelection = new Set(INSIGHTS.map((i) => i.id));
+
 function buildInsightSections() {
   const host = $("#insights");
   host.innerHTML = "";
@@ -336,29 +339,53 @@ function buildInsightSections() {
        <div class="insight-body" data-body="${ins.id}"></div>`;
     addCopyButton(section.querySelector("h3"), () => (ins._answer || "").trim());
     host.appendChild(section);
-    ins._timer = null;
     ins._controller = null;
     ins._seq = 0;
     ins._answer = "";
   });
 }
 
-function scheduleInsights() {
-  const empty = state.selected.size === 0;
+function renderInsightChecklist() {
+  const box = $("#insight-checklist");
+  box.innerHTML = "";
   INSIGHTS.forEach((ins) => {
-    clearTimeout(ins._timer);
-    const section = $(`#insight-${ins.id}`);
-    if (empty) {
-      if (ins._controller) ins._controller.abort();
-      ins._seq++;                       // invalidate any in-flight stream
-      section.hidden = true;
-      $(`[data-body="${ins.id}"]`).innerHTML = "";
-      $(`[data-status="${ins.id}"]`).innerHTML = "";
-      return;
-    }
-    section.hidden = false;
+    const id = `insight-check-${ins.id}`;
+    const row = el("label", "insight-check");
+    row.htmlFor = id;
+    const checkbox = el("input");
+    checkbox.type = "checkbox";
+    checkbox.id = id;
+    checkbox.checked = state.insightSelection.has(ins.id);
+    checkbox.onchange = () => {
+      if (checkbox.checked) state.insightSelection.add(ins.id);
+      else state.insightSelection.delete(ins.id);
+    };
+    row.append(checkbox, document.createTextNode(ins.title));
+    box.appendChild(row);
+  });
+}
+
+// Aborts any in-flight insight streams and hides their sections, without
+// running anything — used whenever the scope (selection/date range) changes
+// so stale answers don't linger until the user re-applies.
+function invalidateInsights() {
+  INSIGHTS.forEach((ins) => {
+    if (ins._controller) ins._controller.abort();
+    ins._seq++;
+    $(`#insight-${ins.id}`).hidden = true;
+    $(`[data-body="${ins.id}"]`).innerHTML = "";
+    $(`[data-status="${ins.id}"]`).innerHTML = "";
+  });
+}
+
+// Runs the checked insight questions for the current profile selection.
+function applyInsights() {
+  invalidateInsights();
+  if (state.selected.size === 0) return;
+  INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
+    $(`#insight-${ins.id}`).hidden = false;
     $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
-    ins._timer = setTimeout(() => runInsight(ins), 900);
+    runInsight(ins);
   });
 }
 
@@ -920,7 +947,8 @@ function applyDateFilter() {
   }
   state.dateRange = range;
   state.metrics.clear();        // KPIs are period-dependent → refetch under the new range
-  syncDashboard();              // refetches metrics + re-runs the LLM insights
+  invalidateInsights();         // insight answers are period-dependent → require a fresh "Aplicar"
+  syncDashboard();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -929,12 +957,14 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSuggestions();
   updateSelection();
   buildInsightSections();
+  renderInsightChecklist();
+  $("#apply-insights").onclick = applyInsights;
   renderDashboard();
   initResizers();
   initDateFilter();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
-  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };
+  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); invalidateInsights(); };
   $("#reset-chat").onclick = resetChat;
   $("#collapse-chat").onclick = () => document.body.classList.add("chat-collapsed");
   $("#open-chat").onclick = () => {
