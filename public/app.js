@@ -9,7 +9,7 @@ const state = {
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
-  dateRange: null,       // { preset, from, to } | null (null = API default, last 28 days)
+  dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
@@ -38,11 +38,11 @@ const PRESET_LABELS = {
 };
 
 // Describes the range currently applied to the insight questions (not the
-// KPI totals, which always use the API's default 28-day window).
+// KPI totals, which always use a fixed "current month" window).
 function rangeLabel() {
-  if (!state.dateRange) return "últimos 28 dias (predefinido)";
-  const { preset, from, to } = state.dateRange;
-  return `${PRESET_LABELS[preset] || "Intervalo"} · ${fmtDatePt(from)}–${fmtDatePt(to)}`;
+  const r = state.dateRange || { preset: "month", ...presetRange("month") };
+  const suffix = state.dateRange ? "" : " (predefinido)";
+  return `${PRESET_LABELS[r.preset] || "Intervalo"}${suffix} · ${fmtDatePt(r.from)}–${fmtDatePt(r.to)}`;
 }
 
 const NETWORK_ORDER = ["instagram", "facebook", "tiktok", "youtube", "linkedin", "x", "threads", "bluesky", "pinterest"];
@@ -425,7 +425,7 @@ async function runInsight(ins) {
         messages: [{ role: "user", content: ins.question }],
         profiles,
         model: state.model,
-        dateRange: state.dateRange || undefined,
+        dateRange: state.dateRange || { preset: "month", ...presetRange("month") },
       }),
       signal: controller.signal,
     });
@@ -451,9 +451,10 @@ async function runInsight(ins) {
 
 async function fetchMetrics(k, p) {
   try {
-    // KPI totals always reflect the API's default window (last 28 days) —
-    // the date-range filter only scopes the LLM insight questions.
-    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
+    // KPI totals always use a fixed "current month" window, independent of
+    // the date-range filter (which only scopes the LLM insight questions).
+    const { from, to } = presetRange("month");
+    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}&from=${from}&to=${to}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
