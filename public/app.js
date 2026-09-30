@@ -947,8 +947,8 @@ function applyDateFilter() {
   }
   state.dateRange = range;
   state.metrics.clear();        // KPIs are period-dependent → refetch under the new range
-  invalidateInsights();         // insight answers are period-dependent → require a fresh "Aplicar"
-  syncDashboard();
+  syncDashboard();              // refetches metrics for the selected networks
+  applyInsights();              // re-runs the checked insight questions under the new range
 }
 
 document.addEventListener("DOMContentLoaded", () => {
