@@ -8,6 +8,7 @@ const state = {
   history: [],           // [{role, content}]
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
+  tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
   dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
@@ -105,6 +106,33 @@ function applyTheme(theme) {
   localStorage.setItem("theme", theme);
   document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) =>
     b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+// ── Top bar: cumulative LLM token usage ───────────────────────────────────
+function renderTokenUsage() {
+  const { inputTokens, outputTokens, totalTokens } = state.tokenUsage;
+  const node = $("#token-usage");
+  node.textContent = `${fmt(totalTokens)} tokens`;
+  node.title = `Tokens LLM consumidos (desde o arranque do servidor)\nEntrada: ${fmt(inputTokens)} · Saída: ${fmt(outputTokens)}`;
+}
+
+function updateTokenUsage(data) {
+  state.tokenUsage = {
+    inputTokens: data.inputTokens || 0,
+    outputTokens: data.outputTokens || 0,
+    totalTokens: data.totalTokens || 0,
+  };
+  renderTokenUsage();
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch("/api/usage");
+    const data = await res.json();
+    if (res.ok) updateTokenUsage(data);
+  } catch {
+    // non-fatal — the badge just stays at 0 until the next chat turn
+  }
 }
 
 // ── Top bar: platform version + LLM model picker ─────────────────────────
@@ -437,6 +465,8 @@ async function runInsight(ins) {
         body.innerHTML = renderMarkdown(answer);
       } else if (event === "tool" && data.status === "running") {
         status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
+      } else if (event === "usage") {
+        updateTokenUsage(data);
       } else if (event === "error") {
         body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
       }
@@ -641,6 +671,8 @@ async function send(text) {
         asstBubble.innerHTML = renderMarkdown(answer);
       } else if (event === "tool") {
         renderTool(asstBubble, data);
+      } else if (event === "usage") {
+        updateTokenUsage(data);
       } else if (event === "error") {
         asstBubble.innerHTML += `<div class="tool-call error">⚠ ${esc(data.error)}</div>`;
       }
@@ -965,6 +997,7 @@ function applyDateFilter() {
 
 document.addEventListener("DOMContentLoaded", () => {
   loadConfig();
+  loadUsage();
   loadProfiles();
   renderSuggestions();
   updateSelection();

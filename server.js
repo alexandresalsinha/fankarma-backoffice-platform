@@ -61,6 +61,14 @@ function updateEnvFile(key, value) {
   writeFileSync(ENV_PATH, text);
 }
 
+// ── In-memory total LLM token usage (since process start) ─────────────
+const usageTotals = { inputTokens: 0, outputTokens: 0 };
+
+function addUsage(usage) {
+  usageTotals.inputTokens += usage?.input_tokens || 0;
+  usageTotals.outputTokens += usage?.output_tokens || 0;
+}
+
 // ── REST: platform version + selectable LLM models + settings state ────
 app.get("/api/config", (_req, res) => {
   res.json({
@@ -68,6 +76,15 @@ app.get("/api/config", (_req, res) => {
     models: AVAILABLE_MODELS,
     defaultModel: DEFAULT_MODEL,
     fpkAuth: { configured: Boolean(process.env.FPK_AUTH), preview: maskSecret(process.env.FPK_AUTH) },
+  });
+});
+
+// ── REST: cumulative LLM token usage (for the top-bar indicator) ──────
+app.get("/api/usage", (_req, res) => {
+  res.json({
+    inputTokens: usageTotals.inputTokens,
+    outputTokens: usageTotals.outputTokens,
+    totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
   });
 });
 
@@ -262,6 +279,13 @@ app.post("/api/chat", async (req, res) => {
     for (let step = 0; step < MAX_STEPS; step++) {
       const reply = await createMessage({ system, messages: convo, tools, model: chatModel });
       const content = Array.isArray(reply.content) ? reply.content : [];
+
+      addUsage(reply.usage);
+      send("usage", {
+        inputTokens: usageTotals.inputTokens,
+        outputTokens: usageTotals.outputTokens,
+        totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
+      });
 
       const text = content
         .filter((c) => c.type === "text")
