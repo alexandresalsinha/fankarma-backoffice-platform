@@ -22,7 +22,7 @@
       </div>
       <div class="topbar-actions">
         <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações">⚙</button>
-        <button id="login-btn" class="login-btn" type="button">Iniciar sessão</button>
+        <button id="login-btn" class="login-btn" type="button" hidden>Iniciar sessão</button>
       </div>
     </header>
 
@@ -43,6 +43,11 @@
         <div class="selection-bar">
           <span id="selection-count">0 selecionados</span>
           <button id="clear-selection" class="link-btn" type="button">Limpar</button>
+        </div>
+        <div class="insights-picker">
+          <div class="insights-picker-head">Perguntas de análise</div>
+          <div id="insight-checklist" class="insight-checklist"></div>
+          <button id="apply-insights" class="apply-btn" type="button" disabled>Atualizar Dashboard</button>
         </div>
       </header>
       <div id="profile-list" class="profile-list">

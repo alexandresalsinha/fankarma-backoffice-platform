@@ -9,13 +9,13 @@ const state = {
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
-  dateRange: null,       // { preset, from, to } | null (null = API default, last 28 days)
+  dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
 const fmt = (n) => nf.format(Math.round(Number(n) || 0));
 
-// ── Date-range helpers (for the dashboard filter) ────────────────────────
+// ── Date-range helpers (for the insight questions' scope) ────────────────
 const isoDate = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const fmtDatePt = (iso) => { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
@@ -37,10 +37,12 @@ const PRESET_LABELS = {
   month: "Mês atual", year: "Ano atual", last3: "Últimos 3 meses", custom: "Intervalo de datas",
 };
 
+// Describes the range currently applied to the insight questions (not the
+// KPI totals, which always use a fixed "current month" window).
 function rangeLabel() {
-  if (!state.dateRange) return "últimos 28 dias (predefinido)";
-  const { preset, from, to } = state.dateRange;
-  return `${PRESET_LABELS[preset] || "Intervalo"} · ${fmtDatePt(from)}–${fmtDatePt(to)}`;
+  const r = state.dateRange || { preset: "month", ...presetRange("month") };
+  const suffix = state.dateRange ? "" : " (predefinido)";
+  return `${PRESET_LABELS[r.preset] || "Intervalo"}${suffix} · ${fmtDatePt(r.from)}–${fmtDatePt(r.to)}`;
 }
 
 const NETWORK_ORDER = ["instagram", "facebook", "tiktok", "youtube", "linkedin", "x", "threads", "bluesky", "pinterest"];
@@ -271,7 +273,8 @@ function profileRow(p) {
     else state.selected.set(k, p);
     renderProfiles();
     updateSelection();
-    syncDashboard();
+    invalidateInsights();
+    renderDashboard();   // reflect the new selection; KPI metrics only refresh on "Aplicar"
   };
   return row;
 }
@@ -279,6 +282,8 @@ function profileRow(p) {
 function updateSelection() {
   const n = state.selected.size;
   $("#selection-count").textContent = `${n} selecionado${n === 1 ? "" : "s"}`;
+  const applyBtn = $("#apply-insights");
+  if (applyBtn) applyBtn.disabled = n === 0;
   const ctx = $("#context-line");
   if (n === 0) ctx.textContent = "Selecione perfis à esquerda para definir o âmbito das suas perguntas.";
   else {
@@ -301,15 +306,12 @@ async function syncDashboard() {
     pending.push(fetchMetrics(k, p));
   }
   renderDashboard();
-  scheduleInsights();
   if (pending.length) await Promise.all(pending);
 }
 
 // ── LLM insights ─────────────────────────────────────────────────────────
-// A fixed set of questions re-asked whenever the selection changes, scoped to
-// the selected profiles and streamed into the bottom of the dashboard. Each
-// question is debounced (a burst of toggles collapses into one request) and
-// abortable (a new selection cancels the in-flight stream).
+// A curated set of questions the user can opt into via checkboxes; nothing
+// runs until "Aplicar" is pressed, scoped to the currently selected profiles.
 const INSIGHTS = [
   {
     id: "best-network",
@@ -324,6 +326,9 @@ const INSIGHTS = [
   },
 ];
 
+// Which insight questions are checked in the picker (all checked by default).
+state.insightSelection = new Set(INSIGHTS.map((i) => i.id));
+
 function buildInsightSections() {
   const host = $("#insights");
   host.innerHTML = "";
@@ -336,30 +341,62 @@ function buildInsightSections() {
        <div class="insight-body" data-body="${ins.id}"></div>`;
     addCopyButton(section.querySelector("h3"), () => (ins._answer || "").trim());
     host.appendChild(section);
-    ins._timer = null;
     ins._controller = null;
     ins._seq = 0;
     ins._answer = "";
   });
 }
 
-function scheduleInsights() {
-  const empty = state.selected.size === 0;
+function renderInsightChecklist() {
+  const box = $("#insight-checklist");
+  box.innerHTML = "";
   INSIGHTS.forEach((ins) => {
-    clearTimeout(ins._timer);
-    const section = $(`#insight-${ins.id}`);
-    if (empty) {
-      if (ins._controller) ins._controller.abort();
-      ins._seq++;                       // invalidate any in-flight stream
-      section.hidden = true;
-      $(`[data-body="${ins.id}"]`).innerHTML = "";
-      $(`[data-status="${ins.id}"]`).innerHTML = "";
-      return;
-    }
-    section.hidden = false;
-    $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
-    ins._timer = setTimeout(() => runInsight(ins), 900);
+    const id = `insight-check-${ins.id}`;
+    const row = el("label", "insight-check");
+    row.htmlFor = id;
+    const checkbox = el("input");
+    checkbox.type = "checkbox";
+    checkbox.id = id;
+    checkbox.checked = state.insightSelection.has(ins.id);
+    checkbox.onchange = () => {
+      if (checkbox.checked) state.insightSelection.add(ins.id);
+      else state.insightSelection.delete(ins.id);
+    };
+    row.append(checkbox, document.createTextNode(ins.title));
+    box.appendChild(row);
   });
+}
+
+// Aborts any in-flight insight streams and hides their sections, without
+// running anything — used whenever the scope (selection/date range) changes
+// so stale answers don't linger until the user re-applies.
+function invalidateInsights() {
+  INSIGHTS.forEach((ins) => {
+    if (ins._controller) ins._controller.abort();
+    ins._seq++;
+    $(`#insight-${ins.id}`).hidden = true;
+    $(`[data-body="${ins.id}"]`).innerHTML = "";
+    $(`[data-status="${ins.id}"]`).innerHTML = "";
+  });
+}
+
+// Runs the checked insight questions for the current profile selection
+// (and current date range). Does not touch the KPI metrics.
+function runCheckedInsights() {
+  invalidateInsights();
+  if (state.selected.size === 0) return;
+  INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
+    $(`#insight-${ins.id}`).hidden = false;
+    $(`[data-status="${ins.id}"]`).innerHTML = `<span class="spinner"></span> a aguardar…`;
+    runInsight(ins);
+  });
+}
+
+// Left-panel "Aplicar": the only place KPI metrics get (re)fetched, and also
+// runs the checked insight questions for the current selection.
+function applySelection() {
+  syncDashboard();
+  runCheckedInsights();
 }
 
 async function runInsight(ins) {
@@ -388,7 +425,7 @@ async function runInsight(ins) {
         messages: [{ role: "user", content: ins.question }],
         profiles,
         model: state.model,
-        dateRange: state.dateRange || undefined,
+        dateRange: state.dateRange || { preset: "month", ...presetRange("month") },
       }),
       signal: controller.signal,
     });
@@ -414,10 +451,10 @@ async function runInsight(ins) {
 
 async function fetchMetrics(k, p) {
   try {
-    let url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}`;
-    if (state.dateRange?.from && state.dateRange?.to) {
-      url += `&from=${state.dateRange.from}&to=${state.dateRange.to}`;
-    }
+    // KPI totals always use a fixed "current month" window, independent of
+    // the date-range filter (which only scopes the LLM insight questions).
+    const { from, to } = presetRange("month");
+    const url = `/api/metrics?network=${encodeURIComponent(p.network)}&profile_id=${encodeURIComponent(p.profile_id)}&from=${from}&to=${to}`;
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
@@ -503,7 +540,8 @@ function renderDashboard() {
       let nums, cls = "sel-net";
       if (m?.status === "done") nums = `👥 ${fmt(m.followers)} · ❤ ${fmt(m.likes)}`;
       else if (m?.status === "error") { nums = "erro"; cls += " error"; }
-      else nums = `<span class="spinner"></span>`;
+      else if (m?.status === "loading") nums = `<span class="spinner"></span>`;
+      else { nums = "— por aplicar"; cls += " pending"; }
       sn.appendChild(el("div", cls,
         `<span class="net-badge ${netCls}">${esc(p.network)}</span>
          <span class="name">${esc(p.profile_name)}</span>
@@ -919,8 +957,10 @@ function applyDateFilter() {
     range = { preset, ...presetRange(preset) };
   }
   state.dateRange = range;
-  state.metrics.clear();        // KPIs are period-dependent → refetch under the new range
-  syncDashboard();              // refetches metrics + re-runs the LLM insights
+  renderDashboard();   // reflect the newly applied range in the "Dashboard" header
+  // KPI metrics are NOT refetched here — they only update via the left panel's
+  // "Aplicar". This range only scopes the LLM insight questions.
+  runCheckedInsights();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -929,12 +969,14 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSuggestions();
   updateSelection();
   buildInsightSections();
+  renderInsightChecklist();
+  $("#apply-insights").onclick = applySelection;
   renderDashboard();
   initResizers();
   initDateFilter();
 
   $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderProfiles(); });
-  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); scheduleInsights(); };
+  $("#clear-selection").onclick = () => { state.selected.clear(); renderProfiles(); updateSelection(); renderDashboard(); invalidateInsights(); };
   $("#reset-chat").onclick = resetChat;
   $("#collapse-chat").onclick = () => document.body.classList.add("chat-collapsed");
   $("#open-chat").onclick = () => {
