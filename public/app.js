@@ -112,8 +112,8 @@ function applyTheme(theme) {
 function renderTokenUsage() {
   const { inputTokens, outputTokens, totalTokens } = state.tokenUsage;
   const node = $("#token-usage");
-  node.textContent = `${fmt(totalTokens)} tokens`;
-  node.title = `Tokens LLM consumidos (desde o arranque do servidor)\nEntrada: ${fmt(inputTokens)} · Saída: ${fmt(outputTokens)}`;
+  node.textContent = `↑${fmt(inputTokens)} ↓${fmt(outputTokens)} tokens`;
+  node.title = `Tokens LLM consumidos (desde o arranque do servidor)\nEntrada: ${fmt(inputTokens)} · Saída: ${fmt(outputTokens)} · Total: ${fmt(totalTokens)}`;
 }
 
 function updateTokenUsage(data) {
