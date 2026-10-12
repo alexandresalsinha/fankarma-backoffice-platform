@@ -8,7 +8,13 @@ const state = {
   history: [],           // [{role, content}]
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
-  tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+  // "total" = cumulative since server start; "current" = spent since the last
+  // dashboard (re)load, derived from "total" minus usageBaseline (see below).
+  tokenUsage: {
+    total: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    current: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+  },
+  usageBaseline: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
   dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
@@ -108,20 +114,42 @@ function applyTheme(theme) {
     b.classList.toggle("active", b.dataset.theme === theme));
 }
 
-// ── Top bar: cumulative LLM token usage ───────────────────────────────────
+// ── Top bar: LLM token usage (cumulative total + current dashboard batch) ──
 function renderTokenUsage() {
-  const { inputTokens, outputTokens, totalTokens } = state.tokenUsage;
-  const node = $("#token-usage");
-  node.textContent = `↑${fmt(inputTokens)} ↓${fmt(outputTokens)} tokens`;
-  node.title = `Tokens LLM consumidos (desde o arranque do servidor)\nEntrada: ${fmt(inputTokens)} · Saída: ${fmt(outputTokens)} · Total: ${fmt(totalTokens)}`;
+  const { total, current } = state.tokenUsage;
+
+  const totalNode = $("#token-usage-total");
+  totalNode.textContent = `Total: ↑${fmt(total.inputTokens)} ↓${fmt(total.outputTokens)} tokens`;
+  totalNode.title = `Total de tokens LLM consumidos (desde o arranque do servidor)\nEntrada: ${fmt(total.inputTokens)} · Saída: ${fmt(total.outputTokens)} · Total: ${fmt(total.totalTokens)}`;
+
+  const currentNode = $("#token-usage-current");
+  currentNode.textContent = `Dashboard: ↑${fmt(current.inputTokens)} ↓${fmt(current.outputTokens)} tokens`;
+  currentNode.title = `Tokens consumidos no último carregamento do dashboard\nEntrada: ${fmt(current.inputTokens)} · Saída: ${fmt(current.outputTokens)} · Total: ${fmt(current.totalTokens)}`;
 }
 
+// Updates from a server "usage" event or /api/usage carry the server's
+// all-time cumulative totals; "current" is derived as the delta since
+// usageBaseline was last snapshotted (see resetDashboardUsageBaseline).
 function updateTokenUsage(data) {
-  state.tokenUsage = {
+  const total = {
     inputTokens: data.inputTokens || 0,
     outputTokens: data.outputTokens || 0,
     totalTokens: data.totalTokens || 0,
   };
+  state.tokenUsage.total = total;
+  state.tokenUsage.current = {
+    inputTokens: Math.max(0, total.inputTokens - state.usageBaseline.inputTokens),
+    outputTokens: Math.max(0, total.outputTokens - state.usageBaseline.outputTokens),
+    totalTokens: Math.max(0, total.totalTokens - state.usageBaseline.totalTokens),
+  };
+  renderTokenUsage();
+}
+
+// Marks "now" as the start of a new dashboard batch: "current" resets to 0
+// and will accumulate only the tokens spent by the insight calls that follow.
+function resetDashboardUsageBaseline() {
+  state.usageBaseline = { ...state.tokenUsage.total };
+  state.tokenUsage.current = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   renderTokenUsage();
 }
 
@@ -129,9 +157,17 @@ async function loadUsage() {
   try {
     const res = await fetch("/api/usage");
     const data = await res.json();
-    if (res.ok) updateTokenUsage(data);
+    if (res.ok) {
+      state.tokenUsage.total = {
+        inputTokens: data.inputTokens || 0,
+        outputTokens: data.outputTokens || 0,
+        totalTokens: data.totalTokens || 0,
+      };
+      state.usageBaseline = { ...state.tokenUsage.total };
+      renderTokenUsage();
+    }
   } catch {
-    // non-fatal — the badge just stays at 0 until the next chat turn
+    // non-fatal — the badges just stay at 0 until the next chat turn
   }
 }
 
@@ -412,6 +448,7 @@ function invalidateInsights() {
 // (and current date range). Does not touch the KPI metrics.
 function runCheckedInsights() {
   invalidateInsights();
+  resetDashboardUsageBaseline();
   if (state.selected.size === 0) return;
   INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
     $(`#insight-${ins.id}`).hidden = false;
