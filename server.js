@@ -69,6 +69,29 @@ function addUsage(usage) {
   usageTotals.outputTokens += usage?.output_tokens || 0;
 }
 
+// ── EUR pricing (Azure AI Foundry, DeepSeek V4 Pro) ────────────────────
+// Deterministic arithmetic, not an LLM guess: asking the model itself to
+// "compute" a cost for two different token counts gave two independent,
+// non-proportional answers (a smaller count priced higher than a larger
+// one) and sometimes echoed its own "€" into the text. A fixed EUR-per-
+// million-tokens rate guarantees the "current" badge cost never exceeds
+// the "total" badge cost, since both are derived from the same rate.
+//
+// Defaults below are Azure AI Foundry's published "Global" rate for
+// DeepSeek-V4 Pro — $1.74 / $3.48 per 1M input/output tokens — converted
+// to EUR at an approximate $1 ≈ €0.92 rate. This is an estimate: override
+// with LLM_PRICE_INPUT_EUR_PER_MILLION / LLM_PRICE_OUTPUT_EUR_PER_MILLION
+// in .env to match your actual invoiced rate (region/tier and FX vary).
+const PRICE_INPUT_EUR_PER_MILLION = Number(process.env.LLM_PRICE_INPUT_EUR_PER_MILLION) || 1.6;
+const PRICE_OUTPUT_EUR_PER_MILLION = Number(process.env.LLM_PRICE_OUTPUT_EUR_PER_MILLION) || 3.2;
+
+function euroCost(inputTokens, outputTokens) {
+  return (
+    ((inputTokens || 0) / 1_000_000) * PRICE_INPUT_EUR_PER_MILLION +
+    ((outputTokens || 0) / 1_000_000) * PRICE_OUTPUT_EUR_PER_MILLION
+  );
+}
+
 // ── REST: platform version + selectable LLM models + settings state ────
 app.get("/api/config", (_req, res) => {
   res.json({
@@ -85,6 +108,7 @@ app.get("/api/usage", (_req, res) => {
     inputTokens: usageTotals.inputTokens,
     outputTokens: usageTotals.outputTokens,
     totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
+    costEur: euroCost(usageTotals.inputTokens, usageTotals.outputTokens),
   });
 });
 
@@ -285,6 +309,7 @@ app.post("/api/chat", async (req, res) => {
         inputTokens: usageTotals.inputTokens,
         outputTokens: usageTotals.outputTokens,
         totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
+        costEur: euroCost(usageTotals.inputTokens, usageTotals.outputTokens),
       });
 
       const text = content
