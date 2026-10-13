@@ -8,12 +8,24 @@ const state = {
   history: [],           // [{role, content}]
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
+  // "total" = cumulative since server start; "current" = spent since the last
+  // dashboard (re)load, derived from "total" minus usageBaseline (see below).
+  tokenUsage: {
+    total: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
+    current: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
+  },
+  usageBaseline: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
   dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
 
 const nf = new Intl.NumberFormat("pt-PT");
 const fmt = (n) => nf.format(Math.round(Number(n) || 0));
+// 4 decimals for sub-cent amounts (typical for a handful of LLM calls), else 2.
+const formatEuro = (n) => {
+  const v = Number(n) || 0;
+  return (v > 0 && v < 0.01 ? v.toFixed(4) : v.toFixed(2)).replace(".", ",");
+};
 
 // ── Date-range helpers (for the insight questions' scope) ────────────────
 const isoDate = (d) =>
@@ -105,6 +117,69 @@ function applyTheme(theme) {
   localStorage.setItem("theme", theme);
   document.querySelectorAll("#theme-toggle .theme-opt").forEach((b) =>
     b.classList.toggle("active", b.dataset.theme === theme));
+}
+
+// ── Top bar: LLM token usage (cumulative total + current dashboard batch) ──
+function renderTokenUsage() {
+  const { total, current } = state.tokenUsage;
+
+  const totalNode = $("#token-usage-total");
+  totalNode.textContent = `Total: ↑${fmt(total.inputTokens)} ↓${fmt(total.outputTokens)} tokens · €${formatEuro(total.costEur)}`;
+  totalNode.title = `Total de tokens e custo LLM (desde o arranque do servidor)\nEntrada: ${fmt(total.inputTokens)} · Saída: ${fmt(total.outputTokens)} · Total: ${fmt(total.totalTokens)} tokens\nCusto estimado: €${formatEuro(total.costEur)}`;
+
+  const currentNode = $("#token-usage-current");
+  currentNode.textContent = `Dashboard: ↑${fmt(current.inputTokens)} ↓${fmt(current.outputTokens)} tokens · €${formatEuro(current.costEur)}`;
+  currentNode.title = `Tokens e custo consumidos no último carregamento do dashboard\nEntrada: ${fmt(current.inputTokens)} · Saída: ${fmt(current.outputTokens)} · Total: ${fmt(current.totalTokens)} tokens\nCusto estimado: €${formatEuro(current.costEur)}`;
+}
+
+// Updates from a server "usage" event or /api/usage carry the server's
+// all-time cumulative totals (tokens + EUR cost, both computed deterministically
+// server-side from a fixed EUR-per-million-tokens rate — never from an LLM
+// guess, which gave non-proportional costs across different token counts).
+// "current" is derived as the delta since usageBaseline was last snapshotted
+// (see resetDashboardUsageBaseline), exactly like the token counts.
+function updateTokenUsage(data) {
+  const total = {
+    inputTokens: data.inputTokens || 0,
+    outputTokens: data.outputTokens || 0,
+    totalTokens: data.totalTokens || 0,
+    costEur: data.costEur || 0,
+  };
+  state.tokenUsage.total = total;
+  state.tokenUsage.current = {
+    inputTokens: Math.max(0, total.inputTokens - state.usageBaseline.inputTokens),
+    outputTokens: Math.max(0, total.outputTokens - state.usageBaseline.outputTokens),
+    totalTokens: Math.max(0, total.totalTokens - state.usageBaseline.totalTokens),
+    costEur: Math.max(0, total.costEur - state.usageBaseline.costEur),
+  };
+  renderTokenUsage();
+}
+
+// Marks "now" as the start of a new dashboard batch: "current" resets to 0
+// and will accumulate only the tokens/cost spent by the insight calls that follow.
+function resetDashboardUsageBaseline() {
+  state.usageBaseline = { ...state.tokenUsage.total };
+  state.tokenUsage.current = { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 };
+  renderTokenUsage();
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch("/api/usage");
+    const data = await res.json();
+    if (res.ok) {
+      state.tokenUsage.total = {
+        inputTokens: data.inputTokens || 0,
+        outputTokens: data.outputTokens || 0,
+        totalTokens: data.totalTokens || 0,
+        costEur: data.costEur || 0,
+      };
+      state.usageBaseline = { ...state.tokenUsage.total };
+      renderTokenUsage();
+    }
+  } catch {
+    // non-fatal — the badges just stay at 0 until the next chat turn
+  }
 }
 
 // ── Top bar: platform version + LLM model picker ─────────────────────────
@@ -384,6 +459,7 @@ function invalidateInsights() {
 // (and current date range). Does not touch the KPI metrics.
 function runCheckedInsights() {
   invalidateInsights();
+  resetDashboardUsageBaseline();
   if (state.selected.size === 0) return;
   INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
     $(`#insight-${ins.id}`).hidden = false;
@@ -437,6 +513,8 @@ async function runInsight(ins) {
         body.innerHTML = renderMarkdown(answer);
       } else if (event === "tool" && data.status === "running") {
         status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
+      } else if (event === "usage") {
+        updateTokenUsage(data);
       } else if (event === "error") {
         body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
       }
@@ -641,6 +719,8 @@ async function send(text) {
         asstBubble.innerHTML = renderMarkdown(answer);
       } else if (event === "tool") {
         renderTool(asstBubble, data);
+      } else if (event === "usage") {
+        updateTokenUsage(data);
       } else if (event === "error") {
         asstBubble.innerHTML += `<div class="tool-call error">⚠ ${esc(data.error)}</div>`;
       }
@@ -965,6 +1045,7 @@ function applyDateFilter() {
 
 document.addEventListener("DOMContentLoaded", () => {
   loadConfig();
+  loadUsage();
   loadProfiles();
   renderSuggestions();
   updateSelection();

@@ -61,6 +61,37 @@ function updateEnvFile(key, value) {
   writeFileSync(ENV_PATH, text);
 }
 
+// ── In-memory total LLM token usage (since process start) ─────────────
+const usageTotals = { inputTokens: 0, outputTokens: 0 };
+
+function addUsage(usage) {
+  usageTotals.inputTokens += usage?.input_tokens || 0;
+  usageTotals.outputTokens += usage?.output_tokens || 0;
+}
+
+// ── EUR pricing (Azure AI Foundry, DeepSeek V4 Pro) ────────────────────
+// Deterministic arithmetic, not an LLM guess: asking the model itself to
+// "compute" a cost for two different token counts gave two independent,
+// non-proportional answers (a smaller count priced higher than a larger
+// one) and sometimes echoed its own "€" into the text. A fixed EUR-per-
+// million-tokens rate guarantees the "current" badge cost never exceeds
+// the "total" badge cost, since both are derived from the same rate.
+//
+// Defaults below are Azure AI Foundry's published "Global" rate for
+// DeepSeek-V4 Pro — $1.74 / $3.48 per 1M input/output tokens — converted
+// to EUR at an approximate $1 ≈ €0.92 rate. This is an estimate: override
+// with LLM_PRICE_INPUT_EUR_PER_MILLION / LLM_PRICE_OUTPUT_EUR_PER_MILLION
+// in .env to match your actual invoiced rate (region/tier and FX vary).
+const PRICE_INPUT_EUR_PER_MILLION = Number(process.env.LLM_PRICE_INPUT_EUR_PER_MILLION) || 1.6;
+const PRICE_OUTPUT_EUR_PER_MILLION = Number(process.env.LLM_PRICE_OUTPUT_EUR_PER_MILLION) || 3.2;
+
+function euroCost(inputTokens, outputTokens) {
+  return (
+    ((inputTokens || 0) / 1_000_000) * PRICE_INPUT_EUR_PER_MILLION +
+    ((outputTokens || 0) / 1_000_000) * PRICE_OUTPUT_EUR_PER_MILLION
+  );
+}
+
 // ── REST: platform version + selectable LLM models + settings state ────
 app.get("/api/config", (_req, res) => {
   res.json({
@@ -68,6 +99,16 @@ app.get("/api/config", (_req, res) => {
     models: AVAILABLE_MODELS,
     defaultModel: DEFAULT_MODEL,
     fpkAuth: { configured: Boolean(process.env.FPK_AUTH), preview: maskSecret(process.env.FPK_AUTH) },
+  });
+});
+
+// ── REST: cumulative LLM token usage (for the top-bar indicator) ──────
+app.get("/api/usage", (_req, res) => {
+  res.json({
+    inputTokens: usageTotals.inputTokens,
+    outputTokens: usageTotals.outputTokens,
+    totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
+    costEur: euroCost(usageTotals.inputTokens, usageTotals.outputTokens),
   });
 });
 
@@ -262,6 +303,14 @@ app.post("/api/chat", async (req, res) => {
     for (let step = 0; step < MAX_STEPS; step++) {
       const reply = await createMessage({ system, messages: convo, tools, model: chatModel });
       const content = Array.isArray(reply.content) ? reply.content : [];
+
+      addUsage(reply.usage);
+      send("usage", {
+        inputTokens: usageTotals.inputTokens,
+        outputTokens: usageTotals.outputTokens,
+        totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
+        costEur: euroCost(usageTotals.inputTokens, usageTotals.outputTokens),
+      });
 
       const text = content
         .filter((c) => c.type === "text")
