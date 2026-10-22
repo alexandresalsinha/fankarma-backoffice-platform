@@ -202,7 +202,16 @@ app.get("/api/metrics", async (req, res) => {
       metrics: "common_followers_count,common_likes_count",
       ...(from && to ? { from, to } : {}),
     });
-    const parsed = JSON.parse(contentToText(result));
+    const text = contentToText(result);
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // The MCP tool returned a plain-text error (e.g. "Error: API rate
+      // limit exceeded") instead of JSON — surface that message directly
+      // rather than the confusing JSON.parse SyntaxError.
+      throw new Error(text.trim() || "Fanpage Karma MCP returned an invalid response");
+    }
     const data = parsed?.data || {};
     res.json({
       network,
