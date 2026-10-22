@@ -8,13 +8,16 @@ const state = {
   history: [],           // [{role, content}]
   streaming: false,
   model: localStorage.getItem("llm-model") || "",   // selected LLM (empty → server default)
-  // "total" = cumulative since server start; "current" = spent since the last
-  // dashboard (re)load, derived from "total" minus usageBaseline (see below).
+  // "total" = cumulative since server start (from the server's running
+  // counters). "dashboard"/"chat" accumulate only the token/cost deltas of
+  // their own in-flight calls (see updateTokenUsage) — tracked independently
+  // so the two panels never pollute each other's numbers when both are
+  // active at once (they share the same /api/chat endpoint).
   tokenUsage: {
     total: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
-    current: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
+    dashboard: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
+    chat: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
   },
-  usageBaseline: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 },
   theme: localStorage.getItem("theme") || "dark",   // "dark" | "light"
   dateRange: null,       // { preset, from, to } | null (null = default to the current month)
 };
@@ -120,50 +123,59 @@ function applyTheme(theme) {
     b.classList.toggle("active", b.dataset.theme === theme));
 }
 
-// ── Top bar: LLM token usage (cumulative total + current dashboard batch) ──
+// ── Top bar: LLM token usage (cumulative total + dashboard + chat badges) ──
+const USAGE_BADGES = [
+  { key: "dashboard", sel: "#token-usage-current", label: "Dashboard", tooltip: "Tokens e custo consumidos no último carregamento do dashboard" },
+  { key: "chat", sel: "#token-usage-chat", label: "Chat", tooltip: "Tokens e custo consumidos na troca de chat mais recente" },
+  { key: "total", sel: "#token-usage-total", label: "Total", tooltip: "Total de tokens e custo LLM (desde o arranque do servidor)" },
+];
+
 function renderTokenUsage() {
-  const { total, current } = state.tokenUsage;
-  console.log("renderTokenUsage:", { total, current });
-
-  const totalNode = $("#token-usage-total");
-  totalNode.textContent = `Total: ↑${fmt(total.inputTokens)} ↓${fmt(total.outputTokens)} tokens · €${formatEuro(total.costEur)}`;
-  totalNode.title = `Total de tokens e custo LLM (desde o arranque do servidor)\nEntrada: ${fmt(total.inputTokens)} · Saída: ${fmt(total.outputTokens)} · Total: ${fmt(total.totalTokens)} tokens\nCusto estimado: €${formatEuro(total.costEur)}`;
-
-  const currentNode = $("#token-usage-current");
-  currentNode.textContent = `Dashboard: ↑${fmt(current.inputTokens)} ↓${fmt(current.outputTokens)} tokens · €${formatEuro(current.costEur)}`;
-  currentNode.title = `Tokens e custo consumidos no último carregamento do dashboard\nEntrada: ${fmt(current.inputTokens)} · Saída: ${fmt(current.outputTokens)} · Total: ${fmt(current.totalTokens)} tokens\nCusto estimado: €${formatEuro(current.costEur)}`;
+  console.log("renderTokenUsage:", state.tokenUsage);
+  for (const { key, sel, label, tooltip } of USAGE_BADGES) {
+    const usage = state.tokenUsage[key];
+    const node = $(sel);
+    node.textContent = `${label}: ↑${fmt(usage.inputTokens)} ↓${fmt(usage.outputTokens)} tokens · €${formatEuro(usage.costEur)}`;
+    node.title = `${tooltip}\nEntrada: ${fmt(usage.inputTokens)} · Saída: ${fmt(usage.outputTokens)} · Total: ${fmt(usage.totalTokens)} tokens\nCusto estimado: €${formatEuro(usage.costEur)}`;
+  }
 }
 
-// Updates from a server "usage" event or /api/usage carry the server's
-// all-time cumulative totals (tokens + EUR cost, both computed deterministically
-// server-side from a fixed EUR-per-million-tokens rate — never from an LLM
-// guess, which gave non-proportional costs across different token counts).
-// "current" is derived as the delta since usageBaseline was last snapshotted
-// (see resetDashboardUsageBaseline), exactly like the token counts.
-function updateTokenUsage(data) {
-  console.log("updateTokenUsage:", data);
-  const total = {
+function emptyUsage() {
+  return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 };
+}
+
+// A "usage" SSE event carries the server's all-time cumulative totals
+// (always applied to "total") plus this specific LLM call's own token/cost
+// delta (applied to `bucket`, one of "dashboard"/"chat") — tokens and EUR
+// cost are both computed deterministically server-side from a fixed
+// EUR-per-million-tokens rate, never guessed by the LLM itself (that gave
+// non-proportional costs across different token counts). Using the call's
+// own delta (rather than diffing the global cumulative total) keeps the
+// dashboard and chat panels accurate even while both have calls in flight
+// at the same time, since they share the same /api/chat endpoint.
+function updateTokenUsage(data, bucket) {
+  console.log("updateTokenUsage:", data, "bucket:", bucket);
+  state.tokenUsage.total = {
     inputTokens: data.inputTokens || 0,
     outputTokens: data.outputTokens || 0,
     totalTokens: data.totalTokens || 0,
     costEur: data.costEur || 0,
   };
-  state.tokenUsage.total = total;
-  state.tokenUsage.current = {
-    inputTokens: Math.max(0, total.inputTokens - state.usageBaseline.inputTokens),
-    outputTokens: Math.max(0, total.outputTokens - state.usageBaseline.outputTokens),
-    totalTokens: Math.max(0, total.totalTokens - state.usageBaseline.totalTokens),
-    costEur: Math.max(0, total.costEur - state.usageBaseline.costEur),
-  };
+  if (bucket) {
+    const u = state.tokenUsage[bucket];
+    u.inputTokens += data.stepInputTokens || 0;
+    u.outputTokens += data.stepOutputTokens || 0;
+    u.totalTokens = u.inputTokens + u.outputTokens;
+    u.costEur += data.stepCostEur || 0;
+  }
   renderTokenUsage();
 }
 
-// Marks "now" as the start of a new dashboard batch: "current" resets to 0
-// and will accumulate only the tokens/cost spent by the insight calls that follow.
-function resetDashboardUsageBaseline() {
-  console.log("resetDashboardUsageBaseline: snapshotting baseline", state.tokenUsage.total);
-  state.usageBaseline = { ...state.tokenUsage.total };
-  state.tokenUsage.current = { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 };
+// Marks "now" as the start of a new dashboard batch / chat exchange: the
+// corresponding badge resets to 0 and accumulates only the calls that follow.
+function resetUsageBucket(bucket) {
+  console.log("resetUsageBucket:", bucket);
+  state.tokenUsage[bucket] = emptyUsage();
   renderTokenUsage();
 }
 
@@ -180,7 +192,6 @@ async function loadUsage() {
         totalTokens: data.totalTokens || 0,
         costEur: data.costEur || 0,
       };
-      state.usageBaseline = { ...state.tokenUsage.total };
       renderTokenUsage();
     }
   } catch {
@@ -475,7 +486,7 @@ function invalidateInsights() {
 function runCheckedInsights() {
   console.log("runCheckedInsights: selected =", state.selected.size, "checked =", [...state.insightSelection]);
   invalidateInsights();
-  resetDashboardUsageBaseline();
+  resetUsageBucket("dashboard");
   if (state.selected.size === 0) return;
   INSIGHTS.filter((ins) => state.insightSelection.has(ins.id)).forEach((ins) => {
     $(`#insight-${ins.id}`).hidden = false;
@@ -533,7 +544,7 @@ async function runInsight(ins) {
       } else if (event === "tool" && data.status === "running") {
         status.innerHTML = `<span class="spinner"></span> a consultar dados…`;
       } else if (event === "usage") {
-        updateTokenUsage(data);
+        updateTokenUsage(data, "dashboard");
       } else if (event === "error") {
         body.innerHTML += `<div class="insight-error">⚠ ${esc(data.error)}</div>`;
       }
@@ -721,6 +732,7 @@ async function send(text) {
   const userBubble = addMessage("user");
   userBubble.textContent = text;
   state.history.push({ role: "user", content: text });
+  resetUsageBucket("chat");
 
   let answer = "";
   const asstBubble = addMessage("assistant", () => answer.trim());
@@ -745,7 +757,7 @@ async function send(text) {
       } else if (event === "tool") {
         renderTool(asstBubble, data);
       } else if (event === "usage") {
-        updateTokenUsage(data);
+        updateTokenUsage(data, "chat");
       } else if (event === "error") {
         asstBubble.innerHTML += `<div class="tool-call error">⚠ ${esc(data.error)}</div>`;
       }

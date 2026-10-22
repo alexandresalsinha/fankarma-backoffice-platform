@@ -304,8 +304,18 @@ app.post("/api/chat", async (req, res) => {
       const reply = await createMessage({ system, messages: convo, tools, model: chatModel });
       const content = Array.isArray(reply.content) ? reply.content : [];
 
+      // This endpoint serves both the dashboard's insight questions and the
+      // free-form chat panel, and their requests can be in flight at the same
+      // time — so alongside the global cumulative totals we also report this
+      // step's own token delta, letting each caller attribute spend to itself
+      // regardless of what else is running concurrently.
+      const stepInputTokens = reply.usage?.input_tokens || 0;
+      const stepOutputTokens = reply.usage?.output_tokens || 0;
       addUsage(reply.usage);
       send("usage", {
+        stepInputTokens,
+        stepOutputTokens,
+        stepCostEur: euroCost(stepInputTokens, stepOutputTokens),
         inputTokens: usageTotals.inputTokens,
         outputTokens: usageTotals.outputTokens,
         totalTokens: usageTotals.inputTokens + usageTotals.outputTokens,
