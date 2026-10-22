@@ -112,6 +112,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 
 // ── Theme (dark / light) ─────────────────────────────────────────────────
 function applyTheme(theme) {
+  console.log("applyTheme:", theme);
   state.theme = theme;
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("theme", theme);
@@ -122,6 +123,7 @@ function applyTheme(theme) {
 // ── Top bar: LLM token usage (cumulative total + current dashboard batch) ──
 function renderTokenUsage() {
   const { total, current } = state.tokenUsage;
+  console.log("renderTokenUsage:", { total, current });
 
   const totalNode = $("#token-usage-total");
   totalNode.textContent = `Total: ↑${fmt(total.inputTokens)} ↓${fmt(total.outputTokens)} tokens · €${formatEuro(total.costEur)}`;
@@ -139,6 +141,7 @@ function renderTokenUsage() {
 // "current" is derived as the delta since usageBaseline was last snapshotted
 // (see resetDashboardUsageBaseline), exactly like the token counts.
 function updateTokenUsage(data) {
+  console.log("updateTokenUsage:", data);
   const total = {
     inputTokens: data.inputTokens || 0,
     outputTokens: data.outputTokens || 0,
@@ -158,15 +161,18 @@ function updateTokenUsage(data) {
 // Marks "now" as the start of a new dashboard batch: "current" resets to 0
 // and will accumulate only the tokens/cost spent by the insight calls that follow.
 function resetDashboardUsageBaseline() {
+  console.log("resetDashboardUsageBaseline: snapshotting baseline", state.tokenUsage.total);
   state.usageBaseline = { ...state.tokenUsage.total };
   state.tokenUsage.current = { inputTokens: 0, outputTokens: 0, totalTokens: 0, costEur: 0 };
   renderTokenUsage();
 }
 
 async function loadUsage() {
+  console.log("loadUsage: fetching /api/usage");
   try {
     const res = await fetch("/api/usage");
     const data = await res.json();
+    console.log("loadUsage: response", data);
     if (res.ok) {
       state.tokenUsage.total = {
         inputTokens: data.inputTokens || 0,
@@ -184,10 +190,12 @@ async function loadUsage() {
 
 // ── Top bar: platform version + LLM model picker ─────────────────────────
 async function loadConfig() {
+  console.log("loadConfig: fetching /api/config");
   const select = $("#model-select");
   try {
     const res = await fetch("/api/config");
     const data = await res.json();
+    console.log("loadConfig: response", data);
     if (!res.ok) throw new Error(data.error || "Failed to load config");
 
     $("#platform-version").textContent = "v" + (data.version || "—");
@@ -222,6 +230,7 @@ async function saveSettings() {
   const status = $("#settings-status");
   const input = $("#fpk-auth-input");
   const fpkAuth = input.value.trim();
+  console.log("saveSettings: submitting", { fpkAuthProvided: !!fpkAuth });
 
   btn.disabled = true;
   status.className = "settings-status";
@@ -254,10 +263,12 @@ async function saveSettings() {
 
 // ── Profiles ───────────────────────────────────────────────────────────
 async function loadProfiles() {
+  console.log("loadProfiles: fetching /api/profiles");
   try {
     const res = await fetch("/api/profiles");
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load profiles");
+    console.log("loadProfiles: loaded", data.profiles.length, "profiles");
     state.profiles = data.profiles;
     renderNetworkFilters();
     renderProfiles();
@@ -344,6 +355,7 @@ function profileRow(p) {
     el("div", "check", "✓"),
   );
   row.onclick = () => {
+    console.log("profileRow click:", k, "selected now:", !state.selected.has(k));
     if (state.selected.has(k)) state.selected.delete(k);
     else state.selected.set(k, p);
     renderProfiles();
@@ -356,6 +368,7 @@ function profileRow(p) {
 
 function updateSelection() {
   const n = state.selected.size;
+  console.log("updateSelection:", n, "selected");
   $("#selection-count").textContent = `${n} selecionado${n === 1 ? "" : "s"}`;
   const applyBtn = $("#apply-insights");
   if (applyBtn) applyBtn.disabled = n === 0;
@@ -372,6 +385,7 @@ function updateSelection() {
 // Each selected (network, profile) gets its followers + likes fetched once and
 // cached. Toggling a profile recomputes the totals in real time.
 async function syncDashboard() {
+  console.log("syncDashboard: start, selected =", state.selected.size);
   // Kick off a fetch for every freshly-selected profile we haven't loaded yet.
   const pending = [];
   for (const [k, p] of state.selected) {
@@ -382,6 +396,7 @@ async function syncDashboard() {
   }
   renderDashboard();
   if (pending.length) await Promise.all(pending);
+  console.log("syncDashboard: done,", pending.length, "fetched");
 }
 
 // ── LLM insights ─────────────────────────────────────────────────────────
@@ -458,6 +473,7 @@ function invalidateInsights() {
 // Runs the checked insight questions for the current profile selection
 // (and current date range). Does not touch the KPI metrics.
 function runCheckedInsights() {
+  console.log("runCheckedInsights: selected =", state.selected.size, "checked =", [...state.insightSelection]);
   invalidateInsights();
   resetDashboardUsageBaseline();
   if (state.selected.size === 0) return;
@@ -471,11 +487,13 @@ function runCheckedInsights() {
 // Left-panel "Aplicar": the only place KPI metrics get (re)fetched, and also
 // runs the checked insight questions for the current selection.
 function applySelection() {
+  console.log("applySelection: triggered");
   syncDashboard();
   runCheckedInsights();
 }
 
 async function runInsight(ins) {
+  console.log("runInsight:", ins.id);
   const body = $(`[data-body="${ins.id}"]`);
   const status = $(`[data-status="${ins.id}"]`);
   if (ins._controller) ins._controller.abort();
@@ -507,6 +525,7 @@ async function runInsight(ins) {
     });
     await readSSE(res, (event, data) => {
       if (seq !== ins._seq) return;     // a newer request superseded this one
+      console.log("runInsight event:", ins.id, event, data);
       if (event === "text") {
         answer += (answer ? "\n\n" : "") + data.text;
         ins._answer = answer;
@@ -522,12 +541,14 @@ async function runInsight(ins) {
     if (seq === ins._seq) status.innerHTML = "";
   } catch (e) {
     if (e.name === "AbortError" || seq !== ins._seq) return;
+    console.error("runInsight failed:", ins.id, e.message);
     status.innerHTML = "";
     body.innerHTML = `<div class="insight-error">⚠ ${esc(e.message)}</div>`;
   }
 }
 
 async function fetchMetrics(k, p) {
+  console.log("fetchMetrics:", k);
   try {
     // KPI totals always use a fixed "current month" window, independent of
     // the date-range filter (which only scopes the LLM insight questions).
@@ -536,10 +557,12 @@ async function fetchMetrics(k, p) {
     const res = await fetch(url);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Falha ao obter métricas");
+    console.log("fetchMetrics: result", k, data);
     // Ignore if the profile was deselected while the request was in flight.
     if (!state.selected.has(k)) { state.metrics.delete(k); return; }
     state.metrics.set(k, { status: "done", followers: data.followers, likes: data.likes });
   } catch (e) {
+    console.error("fetchMetrics failed:", k, e.message);
     if (state.selected.has(k)) state.metrics.set(k, { status: "error", error: e.message });
   }
   renderDashboard();
@@ -686,6 +709,7 @@ function scrollDown() {
 }
 
 async function send(text) {
+  console.log("send:", text);
   if (!text.trim() || state.streaming) return;
   state.streaming = true;
   const sendBtn = $("#send");
@@ -714,6 +738,7 @@ async function send(text) {
     });
 
     await readSSE(res, (event, data) => {
+      console.log("send event:", event, data);
       if (event === "text") {
         answer += (answer ? "\n\n" : "") + data.text;
         asstBubble.innerHTML = renderMarkdown(answer);
@@ -729,6 +754,7 @@ async function send(text) {
 
     if (answer) state.history.push({ role: "assistant", content: answer });
   } catch (e) {
+    console.error("send failed:", e.message);
     asstBubble.innerHTML += `<div class="tool-call error">⚠ ${esc(e.message)}</div>`;
   } finally {
     state.streaming = false;
@@ -739,6 +765,7 @@ async function send(text) {
 }
 
 function renderTool(bubble, data) {
+  console.log("renderTool:", data);
   let node = bubble.querySelector(`[data-tool="${data.id}"]`);
   if (!node) {
     node = el("div", "tool-call");
@@ -916,6 +943,7 @@ function renderChartBlock(lines) {
 
 // ── Schema modal ─────────────────────────────────────────────────────────
 async function openSchema() {
+  console.log("openSchema: fetching /api/schema");
   const modal = $("#schema-modal");
   const body = $("#schema-body");
   modal.classList.remove("hidden");
@@ -924,6 +952,7 @@ async function openSchema() {
     const res = await fetch("/api/schema");
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed");
+    console.log("openSchema: loaded", data.tools?.length, "tools");
     body.innerHTML = "";
     data.tools.forEach((t) => {
       const props = t.inputSchema?.properties || {};
@@ -937,6 +966,7 @@ async function openSchema() {
       body.appendChild(div);
     });
   } catch (e) {
+    console.error("openSchema failed:", e.message);
     body.innerHTML = `<div class="loading">⚠ ${esc(e.message)}</div>`;
   }
 }
@@ -1025,6 +1055,7 @@ function initDateFilter() {
 }
 
 function applyDateFilter() {
+  console.log("applyDateFilter: triggered");
   const preset = $("#range-preset").value;
   let range;
   if (preset === "custom") {
@@ -1037,6 +1068,7 @@ function applyDateFilter() {
     range = { preset, ...presetRange(preset) };
   }
   state.dateRange = range;
+  console.log("applyDateFilter: range set to", range);
   renderDashboard();   // reflect the newly applied range in the "Dashboard" header
   // KPI metrics are NOT refetched here — they only update via the left panel's
   // "Aplicar". This range only scopes the LLM insight questions.
@@ -1044,6 +1076,7 @@ function applyDateFilter() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  console.log("DOMContentLoaded: initializing app");
   loadConfig();
   loadUsage();
   loadProfiles();
