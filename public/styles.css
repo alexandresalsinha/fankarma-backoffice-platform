@@ -412,6 +412,26 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin-top: 6px; font-size: 11px; color: var(--muted); max-width: 76px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
 }
+.insight-posts { margin: 10px 0; }
+.insight-posts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.insight-post-card {
+  display: block; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--panel-2); text-decoration: none; color: inherit;
+  transition: border-color 0.15s ease;
+}
+.insight-post-card:hover { border-color: var(--accent); }
+.insight-post-thumb { position: relative; aspect-ratio: 1 / 1; background: var(--border); }
+.insight-post-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.insight-post-badge {
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.insight-post-caption {
+  padding: 8px 9px; font-size: 11.5px; color: var(--muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
 .insight-body ul, .insight-body ol { margin: 0 0 8px; padding-left: 18px; }
 .insight-body code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .insight-body strong { color: var(--text); }

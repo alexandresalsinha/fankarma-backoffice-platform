@@ -11,7 +11,10 @@
       "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(\"tools:\",j.tools.map\\(t=>t.name\\).join\\(\", \"\\)\\)}\\)')",
       "mcp__fanpagekarma__get_profile_metrics",
       "Skill(dataviz)",
-      "WebFetch(domain:azure.microsoft.com)"
+      "WebFetch(domain:azure.microsoft.com)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -N -X POST http://localhost:4000/api/chat -H 'Content-Type: application/json' -d '{ *)",
+      "Read(//tmp/**)"
     ]
   }
 }

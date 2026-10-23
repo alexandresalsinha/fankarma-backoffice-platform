@@ -251,6 +251,12 @@ function buildSystemPrompt(profiles, dateRange) {
     "  Carrossel de bastidores | 150 | 300",
     "  ```",
     "  For a single metric still include the header row with one series name, e.g. `Conteúdo | Novos seguidores`. Keep category labels short (under ~30 characters), and use at most ~6 categories and ~4 series per chart. You may still add normal Markdown text before/after the block to explain the data — never substitute the chart with a Markdown table of dashes/bars or ASCII art.",
+    "- When the user asks to see specific posts, or you are discussing a handful of posts and it would help to show what they actually look like, output a fenced code block tagged `posts` — the client renders it as a grid of media cards (thumbnail, network/type badge, caption, link to the original post). Format: one JSON object per line, no surrounding array, with the keys `network`, `type`, `image`, `link`, `caption` (caption optional). `image` and `link` MUST be copied verbatim from the `image` and `link` fields of the `get_profile_posts` tool result for that post — never invent or guess a URL; if a post has no `image` field, omit that post from the block. Example:",
+    "  ```posts",
+    '  {"network":"instagram","type":"REEL","image":"https://scontent.../858981324.jpg","link":"https://www.instagram.com/reel/DewfW0eCOKB/","caption":"Cuando nos preguntan cuál es el mejor momento para tomar un café..."}',
+    '  {"network":"facebook","type":"PHOTO","image":"https://scontent.../853280665.jpg","link":"https://www.facebook.com/411769451151546/posts/1442574214737726","caption":"O Flamengo de Leonardo Jardim..."}',
+    "  ```",
+    "  Keep the block to the posts actually relevant to the answer (usually under ~12); you may still add normal Markdown text before/after it.",
   ];
 
   if (profiles?.length) {
@@ -376,7 +382,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
 app.listen(PORT, () => {
   console.log(`\n  Fanpage Karma backoffice → http://localhost:${PORT}\n`);
 });

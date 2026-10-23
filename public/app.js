@@ -841,7 +841,9 @@ function renderMarkdown(md) {
       const body = [];
       while (i < lines.length && !/^```\s*$/.test(lines[i])) { body.push(lines[i]); i++; }
       i++; // skip closing fence
-      html += fence[1] === "chart" ? renderChartBlock(body) : `<pre><code>${esc(body.join("\n"))}</code></pre>`;
+      if (fence[1] === "chart") html += renderChartBlock(body);
+      else if (fence[1] === "posts") html += renderPostsBlock(body);
+      else html += `<pre><code>${esc(body.join("\n"))}</code></pre>`;
       continue;
     }
     // Table
@@ -951,6 +953,49 @@ function renderChartBlock(lines) {
     ${legend}
     <div class="insight-chart-plot">${gridlines}<div class="insight-chart-groups">${groups}</div></div>
   </div>`;
+}
+
+// Parses a ```posts block into a grid of media cards. Format: one JSON object
+// per line — {network, type, image, link, caption} — sourced verbatim from the
+// get_profile_posts tool result. A post without an `image` is skipped; a post
+// whose image later fails to load (hotlink protection, expired CDN URL, ...)
+// hides its own card rather than showing a broken-image icon.
+function renderPostsBlock(lines) {
+  const posts = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const p = JSON.parse(line);
+      if (p && typeof p.image === "string" && p.image) posts.push(p);
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  if (!posts.length) return "";
+
+  const cards = posts.map((p) => {
+    const network = String(p.network || "").toLowerCase();
+    const type = String(p.type || "").toUpperCase();
+    const link = typeof p.link === "string" ? p.link : "";
+    const captionRaw = p.caption ? String(p.caption) : "";
+    const caption = captionRaw
+      ? esc(captionRaw.slice(0, 180)) + (captionRaw.length > 180 ? "…" : "")
+      : "";
+
+    const inner = `
+      <div class="insight-post-thumb">
+        <img src="${esc(p.image)}" alt="" loading="lazy" onerror="this.closest('.insight-post-card').style.display='none'" />
+        <span class="insight-post-badge">${esc(network)}${type ? ` · ${esc(type)}` : ""}</span>
+      </div>
+      ${caption ? `<div class="insight-post-caption">${caption}</div>` : ""}`;
+
+    return link
+      ? `<a class="insight-post-card" href="${esc(link)}" target="_blank" rel="noreferrer">${inner}</a>`
+      : `<div class="insight-post-card">${inner}</div>`;
+  }).join("");
+
+  return `<div class="insight-posts"><div class="insight-posts-grid">${cards}</div></div>`;
 }
 
 // ── Schema modal ─────────────────────────────────────────────────────────
