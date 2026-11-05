@@ -25,6 +25,7 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --w-left: 340px;
   --w-mid: 380px;
+  --h-insights: 220px;
 }
 
 /* Light theme — activated by data-theme="light" on <html>. Only the palette
@@ -191,7 +192,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-right: 1px solid var(--border);
   min-height: 0;
 }
-.side-head { padding: 16px 16px 10px; border-bottom: 1px solid var(--border); }
+.side-head { padding: 16px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .brand-dot {
   width: 34px; height: 34px; border-radius: 9px; flex: none;
@@ -225,15 +226,36 @@ body.resizing { cursor: col-resize; user-select: none; }
 .link-btn:hover { text-decoration: underline; }
 
 .insights-picker {
-  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; min-height: 0;
 }
 .insights-picker-head {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
   color: var(--muted); font-weight: 600; margin-bottom: 8px;
 }
-.insights-picker .apply-btn { width: 100%; margin-top: 10px; margin-left: 0; }
+.insights-picker .apply-btn { width: 100%; margin-top: 10px; margin-left: 0; flex-shrink: 0; }
 .insights-picker .apply-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
-.insight-checklist { display: flex; flex-direction: column; gap: 8px; }
+.insight-checklist {
+  display: flex; flex-direction: column; gap: 8px;
+  height: var(--h-insights); overflow-y: auto; padding-right: 4px;
+}
+
+/* ── Vertical resizer (between the questions picker and the profile list) ── */
+.v-resizer {
+  height: 6px; flex-shrink: 0;
+  background: var(--border);
+  cursor: row-resize;
+  position: relative;
+  transition: background 0.15s;
+}
+.v-resizer::after {
+  content: "";
+  position: absolute;
+  inset: -3px 0;   /* wider hit target than the visible 6px gutter */
+}
+.v-resizer:hover, .v-resizer.dragging { background: var(--accent); }
+body.resizing-v { cursor: row-resize; user-select: none; }
 .insight-check {
   display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text);
   cursor: pointer; user-select: none;
@@ -412,6 +434,26 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin-top: 6px; font-size: 11px; color: var(--muted); max-width: 76px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
 }
+.insight-posts { margin: 10px 0; }
+.insight-posts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.insight-post-card {
+  display: block; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--panel-2); text-decoration: none; color: inherit;
+  transition: border-color 0.15s ease;
+}
+.insight-post-card:hover { border-color: var(--accent); }
+.insight-post-thumb { position: relative; aspect-ratio: 1 / 1; background: var(--border); }
+.insight-post-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.insight-post-badge {
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.insight-post-caption {
+  padding: 8px 9px; font-size: 11.5px; color: var(--muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
 .insight-body ul, .insight-body ol { margin: 0 0 8px; padding-left: 18px; }
 .insight-body code { background: var(--panel); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .insight-body strong { color: var(--text); }

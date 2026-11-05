@@ -425,6 +425,102 @@ const INSIGHTS = [
     question:
       "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento. Mostra-me também em gráficos.",
   },
+  {
+    id: "performance-summary",
+    title: "Resumo da performance",
+    question:
+      "Resume a performance em 3 frases: o que correu bem, o que correu mal, o que mudou.",
+  },
+  {
+    id: "network-evolution",
+    title: "Evolução por rede",
+    question:
+      "Como evoluíram alcance, Interações por impressão/view, visualizações e seguidores em cada uma das redes? Destaca as variações acima de 10% e quais os principais fatores que contribuiram para os resultados.",
+  },
+  {
+    id: "results-concentration",
+    title: "Concentração de resultados",
+    question:
+      "Os resultados do intervalo de tempo escolhido foi puxado por poucos posts ou foi consistente? Que % do alcance total veio dos 3 melhores posts?",
+  },
+  {
+    id: "top-bottom-posts-impact",
+    title: "Impacto dos extremos",
+    question:
+      "Se retirarmos os 3 melhores e os 3 piores posts, a performance média subiu ou desceu?",
+  },
+  {
+    id: "unexpected-metric",
+    title: "Métrica mais inesperada",
+    question:
+      "Que métrica teve o comportamento mais inesperado e qual a explicação mais provável?",
+  },
+  {
+    id: "top-5-posts",
+    title: "Top 5 posts",
+    question:
+      "Quais os 5 posts com melhor performance e o que têm em comum (tema, formato, tom, duração, presença de pessoas, humor, produto)?",
+  },
+  {
+    id: "saves-shares-low-reach",
+    title: "Guardados/partilhas vs. alcance",
+    question:
+      "Que posts tiveram muitos guardados ou partilhas mas pouco alcance?",
+  },
+  {
+    id: "people-vs-brand-content",
+    title: "Pessoas vs. marca",
+    question:
+      "Conteúdo com pessoas/criadores vs. conteúdo só de marca: qual a diferença de performance?",
+  },
+  {
+    id: "comments-copy-triggers",
+    title: "Copies com mais comentários",
+    question:
+      "Que copies ou legendas geraram mais comentários? Que tipo de frase os provocou (pergunta, opinião, provocação)?",
+  },
+  {
+    id: "best-days-times",
+    title: "Melhores dias e horas",
+    question:
+      "Em que dias da semana e faixas horárias os posts tiveram melhor performance?",
+  },
+  {
+    id: "frequency-vs-reach",
+    title: "Frequência vs. alcance",
+    question:
+      "Existe relação entre o número de posts por semana e o alcance médio por post? A partir de que frequência o alcance por post começa a cair?",
+  },
+  {
+    id: "comments-sentiment",
+    title: "Sentimento dos comentários",
+    question:
+      "Classifica os comentários em positivos, neutros e negativos. Como evoluiu face ao período anterior?",
+  },
+  {
+    id: "recurring-comment-themes",
+    title: "Temas nos comentários",
+    question:
+      "Quais os 5 temas mais recorrentes nos comentários? Algum é novo face ao período anterior?",
+  },
+  {
+    id: "promoted-vs-organic",
+    title: "Promovidos vs. orgânicos",
+    question:
+      "Os posts promovidos no intervalo de tempo escolhido eram os que já tinham melhor performance orgânica? Se não, que posts orgânicos fortes deveríamos ter impulsionado?",
+  },
+  {
+    id: "outlier-post",
+    title: "Post fora da curva",
+    question:
+      "Algum post teve performance muito acima da média no intervalo de tempo escolhido? O que o distingue dos restantes e é replicável ou foi sorte (trend, partilha externa, timing)?",
+  },
+  {
+    id: "next-steps",
+    title: "Próximos passos",
+    question:
+      "Com base na análise do intervalo de tempo escolhido, quais são as 3 coisas que deveríamos fazer mais, as 3 que deveríamos deixar de fazer e as 3 que deveríamos testar?",
+  },
 ];
 
 // Which insight questions are checked in the picker (all checked by default).
@@ -841,7 +937,9 @@ function renderMarkdown(md) {
       const body = [];
       while (i < lines.length && !/^```\s*$/.test(lines[i])) { body.push(lines[i]); i++; }
       i++; // skip closing fence
-      html += fence[1] === "chart" ? renderChartBlock(body) : `<pre><code>${esc(body.join("\n"))}</code></pre>`;
+      if (fence[1] === "chart") html += renderChartBlock(body);
+      else if (fence[1] === "posts") html += renderPostsBlock(body);
+      else html += `<pre><code>${esc(body.join("\n"))}</code></pre>`;
       continue;
     }
     // Table
@@ -953,6 +1051,49 @@ function renderChartBlock(lines) {
   </div>`;
 }
 
+// Parses a ```posts block into a grid of media cards. Format: one JSON object
+// per line — {network, type, image, link, caption} — sourced verbatim from the
+// get_profile_posts tool result. A post without an `image` is skipped; a post
+// whose image later fails to load (hotlink protection, expired CDN URL, ...)
+// hides its own card rather than showing a broken-image icon.
+function renderPostsBlock(lines) {
+  const posts = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const p = JSON.parse(line);
+      if (p && typeof p.image === "string" && p.image) posts.push(p);
+    } catch {
+      /* skip malformed line */
+    }
+  }
+  if (!posts.length) return "";
+
+  const cards = posts.map((p) => {
+    const network = String(p.network || "").toLowerCase();
+    const type = String(p.type || "").toUpperCase();
+    const link = typeof p.link === "string" ? p.link : "";
+    const captionRaw = p.caption ? String(p.caption) : "";
+    const caption = captionRaw
+      ? esc(captionRaw.slice(0, 180)) + (captionRaw.length > 180 ? "…" : "")
+      : "";
+
+    const inner = `
+      <div class="insight-post-thumb">
+        <img src="${esc(p.image)}" alt="" loading="lazy" onerror="this.closest('.insight-post-card').style.display='none'" />
+        <span class="insight-post-badge">${esc(network)}${type ? ` · ${esc(type)}` : ""}</span>
+      </div>
+      ${caption ? `<div class="insight-post-caption">${caption}</div>` : ""}`;
+
+    return link
+      ? `<a class="insight-post-card" href="${esc(link)}" target="_blank" rel="noreferrer">${inner}</a>`
+      : `<div class="insight-post-card">${inner}</div>`;
+  }).join("");
+
+  return `<div class="insight-posts"><div class="insight-posts-grid">${cards}</div></div>`;
+}
+
 // ── Schema modal ─────────────────────────────────────────────────────────
 async function openSchema() {
   console.log("openSchema: fetching /api/schema");
@@ -1046,6 +1187,32 @@ function initResizers() {
       window.addEventListener("mouseup", onUp);
     });
   });
+
+  // Vertical resizer: drag to trade height between the questions checklist
+  // and the profile list below it, within the sidebar.
+  const vResizer = $("#resizer-insights");
+  if (vResizer) {
+    vResizer.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = parseFloat(getComputedStyle(document.body).getPropertyValue("--h-insights"));
+      vResizer.classList.add("dragging");
+      document.body.classList.add("resizing-v");
+
+      const onMove = (ev) => {
+        const h = clamp(startH + (ev.clientY - startY), 60, 600);
+        document.body.style.setProperty("--h-insights", h + "px");
+      };
+      const onUp = () => {
+        vResizer.classList.remove("dragging");
+        document.body.classList.remove("resizing-v");
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  }
 }
 
 // ── Date filter (drives the dashboard KPIs + LLM insight queries) ────────
