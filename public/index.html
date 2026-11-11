@@ -24,7 +24,7 @@
         <span id="token-usage-total" class="topbar-version" title="Total de tokens LLM consumidos (desde o arranque do servidor)">Total: 0 tokens</span>
       </div>
       <div class="topbar-actions">
-        <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações">⚙</button>
+        <button id="settings-btn" class="icon-action" type="button" title="Configurações" aria-label="Configurações" data-icon="settings"></button>
         <button id="login-btn" class="login-btn" type="button" hidden>Iniciar sessão</button>
       </div>
     </header>
@@ -92,17 +92,19 @@
       <div id="dash-body" class="dash-body">
         <div class="kpi-row">
           <div class="kpi-card">
-            <div class="kpi-icon" style="background: var(--accent);">👥</div>
+            <div class="kpi-icon" style="background: var(--accent);" data-icon="users"></div>
             <div class="kpi-meta">
               <div class="kpi-label">Total de seguidores</div>
               <div class="kpi-value" id="kpi-followers">0</div>
+              <div class="kpi-period">mês atual</div>
             </div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-icon" style="background: var(--like);">❤</div>
+            <div class="kpi-icon" style="background: var(--like);" data-icon="heart"></div>
             <div class="kpi-meta">
               <div class="kpi-label">Total de likes</div>
               <div class="kpi-value" id="kpi-likes">0</div>
+              <div class="kpi-period">mês atual</div>
             </div>
           </div>
         </div>
@@ -133,13 +135,13 @@
         </div>
         <div class="chat-head-actions">
           <button id="reset-chat" class="ghost-btn" type="button">Nova conversa</button>
-          <button id="collapse-chat" class="ghost-btn icon-btn" type="button" title="Fechar chat" aria-label="Fechar chat">✕</button>
+          <button id="collapse-chat" class="ghost-btn icon-btn" type="button" title="Fechar chat" aria-label="Fechar chat" data-icon="close"></button>
         </div>
       </header>
 
       <div id="messages" class="messages">
         <div class="empty-chat">
-          <div class="empty-emoji">💬</div>
+          <div class="empty-emoji" data-icon="chat"></div>
           <h3>Faça perguntas sobre os seus perfis ligados</h3>
           <p>Selecione um ou mais perfis e faça perguntas — o assistente consulta a API da Fanpage Karma em tempo real.</p>
           <div class="suggestions" id="suggestions"></div>
@@ -148,17 +150,17 @@
 
       <form id="composer" class="composer">
         <textarea id="input" rows="1" placeholder="Pergunte sobre os perfis selecionados…" autocomplete="off"></textarea>
-        <button id="send" type="submit" title="Enviar">➤</button>
+        <button id="send" type="submit" title="Enviar" aria-label="Enviar" data-icon="send"></button>
       </form>
     </main>
     </div>
 
-    <button id="open-chat" class="open-chat-fab" type="button" title="Abrir chat" aria-label="Abrir chat de análise">💬</button>
+    <button id="open-chat" class="open-chat-fab" type="button" title="Abrir chat" aria-label="Abrir chat de análise" data-icon="chat"></button>
 
     <div id="settings-modal" class="modal hidden">
-      <div class="modal-card">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" tabindex="-1">
         <header>
-          <h3>Configurações da plataforma</h3>
+          <h3 id="settings-modal-title">Configurações da plataforma</h3>
           <button id="settings-close" class="link-btn" type="button">Fechar</button>
         </header>
         <div class="settings-body">
@@ -166,8 +168,8 @@
             <label class="setting-label">Tema</label>
             <p class="setting-hint">Aparência da interface.</p>
             <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Selecionar tema">
-              <button type="button" class="theme-opt" data-theme="dark">🌙 Escuro</button>
-              <button type="button" class="theme-opt" data-theme="light">☀ Claro</button>
+              <button type="button" class="theme-opt" data-theme="dark"><span data-icon="moon"></span> Escuro</button>
+              <button type="button" class="theme-opt" data-theme="light"><span data-icon="sun"></span> Claro</button>
             </div>
           </div>
 
@@ -197,9 +199,9 @@
     </div>
 
     <div id="schema-modal" class="modal hidden">
-      <div class="modal-card">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="schema-modal-title" tabindex="-1">
         <header>
-          <h3>Fanpage Karma MCP · Esquema de ferramentas</h3>
+          <h3 id="schema-modal-title">Fanpage Karma MCP · Esquema de ferramentas</h3>
           <button id="schema-close" class="link-btn" type="button">Fechar</button>
         </header>
         <div id="schema-body" class="schema-body"></div>

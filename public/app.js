@@ -113,6 +113,67 @@ const el = (tag, cls, html) => {
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// ── Icon system (inline SVG, single stroke weight, themed via currentColor) ─
+// Replaces emoji glyphs in the UI chrome so every icon shares one family,
+// stroke width, and optical weight instead of relying on the OS emoji font.
+const ICON_PATHS = {
+  settings: '<circle cx="12" cy="12" r="6.3"/><circle cx="12" cy="12" r="2.3"/>' +
+    [0, 45, 90, 135, 180, 225, 270, 315].map((a) =>
+      `<rect x="10.8" y="1" width="2.4" height="3.4" rx="1" fill="currentColor" stroke="none" transform="rotate(${a} 12 12)"/>`
+    ).join(""),
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
+  chat: '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.3" cy="9" r="2.3"/><path d="M15.5 14.3c2.3.5 4 2.5 4 5.2"/>',
+  heart: '<path d="M12 21s-7.5-4.6-10-9.3C.6 8.6 2 5 5.5 5c2 0 3.4 1 4.5 2.5C11.1 6 12.5 5 14.5 5 18 5 19.4 8.6 22 11.7 19.5 16.4 12 21 12 21z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
+  bot: '<rect x="4" y="12" width="3" height="8" rx="1"/><rect x="10.5" y="7" width="3" height="13" rx="1"/><rect x="17" y="3" width="3" height="17" rx="1"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  check: '<path d="M5 13l4 4L19 7"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
+};
+function icon(name) {
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
+}
+// Fills every static `data-icon="name"` placeholder in the initial HTML.
+function applyStaticIcons() {
+  document.querySelectorAll("[data-icon]").forEach((node) => { node.innerHTML = icon(node.dataset.icon); });
+}
+
+// ── Modal accessibility (focus trap, Escape-to-close, focus restore) ───────
+// Adds the keyboard behavior the static role="dialog" markup promises:
+// focus moves into the dialog on open, Tab cycles within it, Escape closes
+// it, and focus returns to whatever opened it. Attaches `_open`/`_close`
+// methods to the modal element; callers use those instead of toggling
+// the "hidden" class directly.
+function setupModalA11y(modal) {
+  let lastFocused = null;
+  const card = modal.querySelector(".modal-card");
+  const focusables = () =>
+    [...card.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((n) => !n.disabled && n.offsetParent !== null);
+
+  modal._open = () => {
+    lastFocused = document.activeElement;
+    modal.classList.remove("hidden");
+    (focusables()[0] || card).focus();
+  };
+  modal._close = () => {
+    modal.classList.add("hidden");
+    lastFocused?.focus();
+  };
+  modal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); modal._close(); return; }
+    if (e.key !== "Tab") return;
+    const items = focusables();
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
+
 // ── Theme (dark / light) ─────────────────────────────────────────────────
 function applyTheme(theme) {
   console.log("applyTheme:", theme);
@@ -307,6 +368,10 @@ function renderNetworkFilters() {
 
 function renderProfiles() {
   const list = $("#profile-list");
+  // Toggling a profile via the keyboard rebuilds the whole list; without this,
+  // focus would drop to <body> and a keyboard user would have to Tab back in
+  // from scratch after every selection.
+  const focusedKey = document.activeElement?.closest?.(".profile")?.dataset.key;
   list.innerHTML = "";
   const q = state.search.toLowerCase();
 
@@ -348,14 +413,23 @@ function renderProfiles() {
         .forEach((p) => list.appendChild(profileRow(p)));
     });
   });
+
+  if (focusedKey) list.querySelector(`[data-key="${focusedKey}"]`)?.focus();
 }
 
 function profileRow(p) {
   const k = keyOf(p);
-  const row = el("div", "profile" + (state.selected.has(k) ? " selected" : ""));
+  const selected = state.selected.has(k);
+  const row = el("div", "profile" + (selected ? " selected" : ""));
+  row.dataset.key = k;
+  row.setAttribute("role", "checkbox");
+  row.setAttribute("tabindex", "0");
+  row.setAttribute("aria-checked", String(selected));
+  row.setAttribute("aria-label", `${p.profile_name}, ${p.network}, @${p.username}`);
   const img = el("img");
   img.src = p.profile_picture_url || "";
   img.referrerPolicy = "no-referrer";
+  img.alt = "";
   img.onerror = () => { img.style.visibility = "hidden"; };
   const netCls = "net-" + (NETWORK_ORDER.includes(p.network) ? p.network : "default");
   row.append(
@@ -363,16 +437,20 @@ function profileRow(p) {
     el("div", "meta",
       `<div class="name">${esc(p.profile_name)}</div>
        <div class="sub"><span class="net-badge ${netCls}">${esc(p.network)}</span> @${esc(p.username)}</div>`),
-    el("div", "check", "✓"),
+    el("div", "check", icon("check")),
   );
-  row.onclick = () => {
-    console.log("profileRow click:", k, "selected now:", !state.selected.has(k));
+  const toggle = () => {
+    console.log("profileRow toggle:", k, "selected now:", !state.selected.has(k));
     if (state.selected.has(k)) state.selected.delete(k);
     else state.selected.set(k, p);
     renderProfiles();
     updateSelection();
     invalidateInsights();
     renderDashboard();   // reflect the new selection; KPI metrics only refresh on "Aplicar"
+  };
+  row.onclick = toggle;
+  row.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
   };
   return row;
 }
@@ -683,7 +761,7 @@ function renderDashboard() {
   const ctx = $("#dash-context");
   ctx.textContent = n === 0
     ? "Selecione redes de perfis à esquerda para ver os totais."
-    : `${n} rede${n === 1 ? "" : "s"} selecionada${n === 1 ? "" : "s"} · ${rangeLabel()}.`;
+    : `${n} rede${n === 1 ? "" : "s"} selecionada${n === 1 ? "" : "s"} · Perguntas: ${rangeLabel()}.`;
 
   const loadingCount = selected.filter(([k]) => state.metrics.get(k)?.status === "loading").length;
   $("#dash-status").innerHTML = loadingCount
@@ -746,7 +824,7 @@ function renderDashboard() {
       const m = state.metrics.get(k);
       const netCls = "net-" + (NETWORK_ORDER.includes(p.network) ? p.network : "default");
       let nums, cls = "sel-net";
-      if (m?.status === "done") nums = `👥 ${fmt(m.followers)} · ❤ ${fmt(m.likes)}`;
+      if (m?.status === "done") nums = `${icon("users")} ${fmt(m.followers)} · ${icon("heart")} ${fmt(m.likes)}`;
       else if (m?.status === "error") { nums = "erro"; cls += " error"; }
       else if (m?.status === "loading") nums = `<span class="spinner"></span>`;
       else { nums = "— por aplicar"; cls += " pending"; }
@@ -774,17 +852,17 @@ function setKpi(sel, value) {
 async function copyToClipboard(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
-    const original = btn.textContent;
+    const original = btn.innerHTML;
     btn.classList.add("copied");
-    btn.textContent = "✓ Copiado";
-    setTimeout(() => { btn.classList.remove("copied"); btn.textContent = original; }, 1500);
+    btn.innerHTML = icon("check") + " Copiado";
+    setTimeout(() => { btn.classList.remove("copied"); btn.innerHTML = original; }, 1500);
   } catch (e) {
     console.error("Copy failed:", e.message);
   }
 }
 
 function addCopyButton(host, getText) {
-  const btn = el("button", "copy-btn", "📋 Copiar");
+  const btn = el("button", "copy-btn", icon("copy") + " Copiar");
   btn.type = "button";
   btn.title = "Copiar resposta";
   btn.onclick = () => copyToClipboard(getText(), btn);
@@ -804,7 +882,7 @@ function addMessage(role, getText) {
   const bubble = el("div", "bubble");
   body.append(head, bubble);
   if (role === "assistant") addCopyButton(head, getText || (() => bubble.textContent.trim()));
-  msg.append(el("div", "avatar", role === "user" ? "🧑" : "📊"), body);
+  msg.append(el("div", "avatar", role === "user" ? icon("user") : icon("bot")), body);
   $("#messages").appendChild(msg);
   scrollDown();
   return bubble;
@@ -1099,7 +1177,7 @@ async function openSchema() {
   console.log("openSchema: fetching /api/schema");
   const modal = $("#schema-modal");
   const body = $("#schema-body");
-  modal.classList.remove("hidden");
+  modal._open();
   body.innerHTML = `<div class="loading">A carregar esquema…</div>`;
   try {
     const res = await fetch("/api/schema");
@@ -1137,7 +1215,11 @@ function renderSuggestions() {
   if (!box) return;
   SUGGESTIONS.forEach((s) => {
     const b = el("div", "suggestion", esc(s));
-    b.onclick = () => { $("#input").value = s; $("#input").focus(); autoGrow(); };
+    b.setAttribute("role", "button");
+    b.setAttribute("tabindex", "0");
+    const activate = () => { $("#input").value = s; $("#input").focus(); autoGrow(); };
+    b.onclick = activate;
+    b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } };
     box.appendChild(b);
   });
 }
@@ -1151,7 +1233,7 @@ function autoGrow() {
 function resetChat() {
   state.history = [];
   $("#messages").innerHTML =
-    `<div class="empty-chat"><div class="empty-emoji">💬</div>
+    `<div class="empty-chat"><div class="empty-emoji">${icon("chat")}</div>
      <h3>Faça perguntas sobre os seus perfis ligados</h3>
      <p>Selecione um ou mais perfis e faça perguntas — o assistente consulta a API da Fanpage Karma em tempo real.</p>
      <div class="suggestions" id="suggestions"></div></div>`;
@@ -1256,6 +1338,7 @@ function applyDateFilter() {
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("DOMContentLoaded: initializing app");
+  applyStaticIcons();
   loadConfig();
   loadUsage();
   loadProfiles();
@@ -1281,11 +1364,12 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.setItem("llm-model", state.model);
   });
   const settingsModal = $("#settings-modal");
+  setupModalA11y(settingsModal);
   const openSettings = () => {
     $("#settings-status").textContent = "";
-    settingsModal.classList.remove("hidden");
+    settingsModal._open();
   };
-  const closeSettings = () => settingsModal.classList.add("hidden");
+  const closeSettings = () => settingsModal._close();
   $("#settings-btn").onclick = openSettings;
   $("#settings-close").onclick = closeSettings;
   settingsModal.onclick = (e) => { if (e.target.id === "settings-modal") closeSettings(); };
@@ -1300,10 +1384,12 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Início de sessão em breve.");
   };
 
+  const schemaModal = $("#schema-modal");
+  setupModalA11y(schemaModal);
   const schemaBtn = $("#schema-btn");
   if (schemaBtn) schemaBtn.onclick = openSchema;   // footer button is optional
-  $("#schema-close").onclick = () => $("#schema-modal").classList.add("hidden");
-  $("#schema-modal").onclick = (e) => { if (e.target.id === "schema-modal") $("#schema-modal").classList.add("hidden"); };
+  $("#schema-close").onclick = () => schemaModal._close();
+  schemaModal.onclick = (e) => { if (e.target.id === "schema-modal") schemaModal._close(); };
 
   const input = $("#input");
   input.addEventListener("input", autoGrow);

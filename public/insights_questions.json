@@ -1,0 +1,109 @@
+[
+  {
+    "id": "best-network",
+    "title": "Melhor desempenho",
+    "question": "Que rede tem melhor desempenho para esta marca?"
+  },
+  {
+    "id": "growth-content",
+    "title": "Conteúdos que atraíram seguidores",
+    "question":
+      "Indica-me quais os conteúdos que mais contribuíram para a angariação de followers e encontra-me ingredientes nesses posts que possam ter contribuído para esse crescimento. Mostra-me também em gráficos."
+  },
+  {
+    "id": "performance-summary",
+    "title": "Resumo da performance",
+    "question":
+      "Resume a performance em 3 frases: o que correu bem, o que correu mal, o que mudou."
+  },
+  {
+    "id": "network-evolution",
+    "title": "Evolução por rede",
+    "question":
+      "Como evoluíram alcance, Interações por impressão/view, visualizações e seguidores em cada uma das redes? Destaca as variações acima de 10% e quais os principais fatores que contribuiram para os resultados."
+  },
+  {
+    "id": "results-concentration",
+    "title": "Concentração de resultados",
+    "question":
+      "Os resultados do intervalo de tempo escolhido foi puxado por poucos posts ou foi consistente? Que % do alcance total veio dos 3 melhores posts?"
+  },
+  {
+    "id": "top-bottom-posts-impact",
+    "title": "Impacto dos extremos",
+    "question":
+      "Se retirarmos os 3 melhores e os 3 piores posts, a performance média subiu ou desceu?"
+  },
+  {
+    "id": "unexpected-metric",
+    "title": "Métrica mais inesperada",
+    "question":
+      "Que métrica teve o comportamento mais inesperado e qual a explicação mais provável?"
+  },
+  {
+    "id": "top-5-posts",
+    "title": "Top 5 posts",
+    "question":
+      "Quais os 5 posts com melhor performance e o que têm em comum (tema, formato, tom, duração, presença de pessoas, humor, produto)?"
+  },
+  {
+    "id": "saves-shares-low-reach",
+    "title": "Guardados/partilhas vs. alcance",
+    "question":
+      "Que posts tiveram muitos guardados ou partilhas mas pouco alcance?"
+  },
+  {
+    "id": "people-vs-brand-content",
+    "title": "Pessoas vs. marca",
+    "question":
+      "Conteúdo com pessoas/criadores vs. conteúdo só de marca: qual a diferença de performance?"
+  },
+  {
+    "id": "comments-copy-triggers",
+    "title": "Copies com mais comentários",
+    "question":
+      "Que copies ou legendas geraram mais comentários? Que tipo de frase os provocou (pergunta, opinião, provocação)?"
+  },
+  {
+    "id": "best-days-times",
+    "title": "Melhores dias e horas",
+    "question":
+      "Em que dias da semana e faixas horárias os posts tiveram melhor performance?"
+  },
+  {
+    "id": "frequency-vs-reach",
+    "title": "Frequência vs. alcance",
+    "question":
+      "Existe relação entre o número de posts por semana e o alcance médio por post? A partir de que frequência o alcance por post começa a cair?"
+  },
+  {
+    "id": "comments-sentiment",
+    "title": "Sentimento dos comentários",
+    "question":
+      "Classifica os comentários em positivos, neutros e negativos. Como evoluiu face ao período anterior?"
+  },
+  {
+    "id": "recurring-comment-themes",
+    "title": "Temas nos comentários",
+    "question":
+      "Quais os 5 temas mais recorrentes nos comentários? Algum é novo face ao período anterior?"
+  },
+  {
+    "id": "promoted-vs-organic",
+    "title": "Promovidos vs. orgânicos",
+    "question":
+      "Os posts promovidos no intervalo de tempo escolhido eram os que já tinham melhor performance orgânica? Se não, que posts orgânicos fortes deveríamos ter impulsionado?"
+  },
+  {
+    "id": "outlier-post",
+    "title": "Post fora da curva",
+    "question":
+      "Algum post teve performance muito acima da média no intervalo de tempo escolhido? O que o distingue dos restantes e é replicável ou foi sorte (trend, partilha externa, timing)?"
+  },
+  {
+    "id": "next-steps",
+    "title": "Próximos passos",
+    "question":
+      "Com base na análise do intervalo de tempo escolhido, quais são as 3 coisas que deveríamos fazer mais, as 3 que deveríamos deixar de fazer e as 3 que deveríamos testar?"
+  }
+]

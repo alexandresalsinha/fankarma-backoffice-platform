@@ -12,3 +12,5 @@ node_modules/
 deploy.zip
 pack.ps1
 .deploy-state.json
+.claude
+settings.local.json
